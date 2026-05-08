@@ -2,7 +2,7 @@ from typing import List, Tuple
 from src.chunker import split_text
 from src.config import settings
 from src.schemas import Chunk, RetrivedChunk, SourceDocument
-from src.promts.promt_ask import ask_prompt
+from src.promts.prompt_ask import ask_prompt
 
 
 class RAGService:
@@ -21,7 +21,7 @@ class RAGService:
     def ingest(self, documents: List[SourceDocument]) -> None:
 
         texts: List[str] = []
-        meta = []
+        meta: List[tuple[str, int, dict]] = []
 
         for doc in documents:
             parts = split_text(
@@ -29,9 +29,9 @@ class RAGService:
                 settings.chunk_size,
                 settings.chunk_overlap,
             )
-            for part in parts:
-                texts.append(part.text)
-                meta.append((doc.doc_id, doc.metadata))
+            for idx, part in enumerate(parts):
+                texts.append(part)
+                meta.append((doc.doc_id, idx, doc.metadata))
 
         if not texts:
             return
@@ -39,8 +39,9 @@ class RAGService:
         embeddings = self._embed(texts)
 
         chunks: List[Chunk] = []
-        for text, embedding, doc_id, metadata in zip(texts, embeddings, meta):
+        for text, embedding, (doc_id, idx, metadata) in zip(texts, embeddings, meta):
             chunks.append(Chunk(
+                chunk_id=f"{doc_id}_chunk_{idx}",
                 text=text,
                 embedding=embedding,
                 doc_id=doc_id,
@@ -56,12 +57,14 @@ class RAGService:
         context = "\n\n".join(f"[{i+1}] {c.text}" for i, c in enumerate(chunks))
 
         prompt = ask_prompt(context)
+        user_prompt = f"Вопрос пользователя: {question}"
 
-        chat = self.client.chat.completions.create(
+        chat = self._client.chat.completions.create(
             model=settings.llm_model,
             temperature=0,
             messages=[
-                {"role": "system", "content": prompt}
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": user_prompt},
             ],
         )
 
