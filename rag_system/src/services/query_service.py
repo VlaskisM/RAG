@@ -5,21 +5,19 @@ from src.schemas import Chunk, RetrivedChunk, SourceDocument
 from src.promts.prompt_ask import ask_prompt
 
 
-class RAGService:
+class QueryService:
     def __init__(self, client, store):
         self._client = client
         self._store = store
-        
-    
-    def _embed(self, texts: List[str]) -> List[List[float]]:
-        resp = self._client.embeddings.create(
+
+    async def _embed(self, texts: List[str]) -> List[List[float]]:
+        resp = await self._client.embeddings.create(
             input=texts,
-            model=settings.embedding_model
+            model=settings.embedding_model,
         )
         return [item.embedding for item in resp.data]
 
-    def ingest(self, documents: List[SourceDocument]) -> None:
-
+    async def ingest(self, documents: List[SourceDocument]) -> None:
         texts: List[str] = []
         meta: List[tuple[str, int, dict]] = []
 
@@ -36,35 +34,33 @@ class RAGService:
         if not texts:
             return
 
-        embeddings = self._embed(texts)
+        embeddings = await self._embed(texts)
 
-        chunks: List[Chunk] = []
-        for text, embedding, (doc_id, idx, metadata) in zip(texts, embeddings, meta):
-            chunks.append(Chunk(
+        chunks: List[Chunk] = [
+            Chunk(
                 chunk_id=f"{doc_id}_chunk_{idx}",
                 text=text,
                 embedding=embedding,
                 doc_id=doc_id,
                 metadata=metadata,
-            ))
+            )
+            for text, embedding, (doc_id, idx, metadata) in zip(texts, embeddings, meta)
+        ]
 
-        self._store.add_chunks(chunks)
+        await self._store.add_chunks(chunks)
 
-    def ask(self, question: str) -> Tuple[str, List[RetrivedChunk]]:
-        embedding = self._embed([question])[0]
-        chunks = self._store.search(embedding, settings.top_k)
+    async def ask(self, question: str) -> Tuple[str, List[RetrivedChunk]]:
+        embedding = (await self._embed([question]))[0]
+        chunks = await self._store.search(embedding, settings.top_k)
 
         context = "\n\n".join(f"[{i+1}] {c.text}" for i, c in enumerate(chunks))
 
-        prompt = ask_prompt(context)
-        user_prompt = f"Вопрос пользователя: {question}"
-
-        chat = self._client.chat.completions.create(
+        chat = await self._client.chat.completions.create(
             model=settings.llm_model,
             temperature=0,
             messages=[
-                {"role": "system", "content": prompt},
-                {"role": "user", "content": user_prompt},
+                {"role": "system", "content": ask_prompt(context)},
+                {"role": "user", "content": f"Вопрос пользователя: {question}"},
             ],
         )
 

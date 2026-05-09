@@ -1,35 +1,34 @@
 from typing import List
-from elasticsearch import Elasticsearch
-from elasticsearch.helpers import bulk
+from elasticsearch import AsyncElasticsearch
+from elasticsearch.helpers import async_bulk
 from abc import ABC, abstractmethod
- 
+
 from src.schemas import Chunk, RetrivedChunk
 
 
 class ElasticsearchVectorStoreInterface(ABC):
 
     @abstractmethod
-    def ensure_index(self) -> None:
+    async def ensure_index(self) -> None:
         pass
 
     @abstractmethod
-    def add_chunks(self, chunks: List[Chunk]) -> None:
+    async def add_chunks(self, chunks: List[Chunk]) -> None:
         pass
 
     @abstractmethod
-    def search(self, query_vector: List[float], k: int) -> List[RetrivedChunk]:
+    async def search(self, query_vector: List[float], k: int) -> List[RetrivedChunk]:
         pass
+
 
 class ElasticsearchVectorStore(ElasticsearchVectorStoreInterface):
     def __init__(self, es_url: str, index_name: str, embedding_dim: int):
-        self._es = Elasticsearch(es_url)
+        self._es = AsyncElasticsearch(es_url)
         self._index_name = index_name
         self._embedding_dim = embedding_dim
-        self.ensure_index()
 
-    def ensure_index(self) -> None:
-        if not self._es.indices.exists(index=self._index_name):
-
+    async def ensure_index(self) -> None:
+        if not await self._es.indices.exists(index=self._index_name):
             body = {
                 "mappings": {
                     "properties": {
@@ -46,12 +45,11 @@ class ElasticsearchVectorStore(ElasticsearchVectorStoreInterface):
                     }
                 }
             }
-            self._es.indices.create(index=self._index_name, body=body)
+            await self._es.indices.create(index=self._index_name, body=body)
 
-    def add_chunks(self, chunks: List[Chunk]) -> None:
-        actions = []
-        for chunk in chunks:
-            actions.append({
+    async def add_chunks(self, chunks: List[Chunk]) -> None:
+        actions = [
+            {
                 "_op_type": "index",
                 "_index": self._index_name,
                 "_id": chunk.chunk_id,
@@ -62,11 +60,13 @@ class ElasticsearchVectorStore(ElasticsearchVectorStoreInterface):
                     "metadata": chunk.metadata,
                     "embedding": chunk.embedding,
                 },
-            })
+            }
+            for chunk in chunks
+        ]
         if actions:
-            bulk(self._es, actions)
+            await async_bulk(self._es, actions)
 
-    def search(self, query_vector: List[float], k: int) -> List[RetrivedChunk]:
+    async def search(self, query_vector: List[float], k: int) -> List[RetrivedChunk]:
         body = {
             "knn": {
                 "field": "embedding",
@@ -76,19 +76,16 @@ class ElasticsearchVectorStore(ElasticsearchVectorStoreInterface):
             },
             "_source": ["doc_id", "chunk_id", "text", "metadata"],
         }
-        response = self._es.search(index=self._index_name, body=body)
+        response = await self._es.search(index=self._index_name, body=body)
         hits = response.get("hits", {}).get("hits", [])
 
-        result: List[RetrivedChunk] = []
-        for hit in hits:
-            source = hit.get("_source", {})
-            result.append(
-                RetrivedChunk(
-                    chunk_id=source.get("chunk_id", ""),
-                    doc_id=source.get("doc_id", ""),
-                    text=source.get("text", ""),
-                    score=float(hit.get("_score", 0.0)),
-                    metadata=source.get("metadata", {}),
-                )
+        return [
+            RetrivedChunk(
+                chunk_id=hit["_source"].get("chunk_id", ""),
+                doc_id=hit["_source"].get("doc_id", ""),
+                text=hit["_source"].get("text", ""),
+                score=float(hit.get("_score", 0.0)),
+                metadata=hit["_source"].get("metadata", {}),
             )
-        return result
+            for hit in hits
+        ]
