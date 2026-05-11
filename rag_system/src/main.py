@@ -1,5 +1,4 @@
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
 from openai import AsyncOpenAI
 from src.vectorstore import ElasticsearchVectorStore
 from src.config import settings
@@ -10,6 +9,7 @@ from src.services.query_service import QueryService
 from src.services.data_loading_service import DataLoadingService
 from src.services.embeding_service import EmbeddingService
 from src.services.chunker_service import ChunkerService
+from src.services.document_conversion_service import DocumentConversionService
 
 
 
@@ -39,7 +39,8 @@ async def lifespan(app: FastAPI):
         client=client,
         store=store,
         embedding_service=EmbeddingService(client=client),
-        chunker_service=ChunkerService()
+        chunker_service=ChunkerService(),
+        document_conversion_service=DocumentConversionService()
     )
     yield
 

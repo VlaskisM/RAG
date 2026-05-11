@@ -9,11 +9,12 @@ class Settings(BaseSettings):
     es_url: str
     es_index: str
     embedding_dim: int
-    chunk_size: int
+    max_tokens_chunk: int
     chunk_overlap: int
     top_k: int
     llm_model: str
     embedding_model: str
+    batch_size: int
 
     model_config = SettingsConfigDict(
         env_file=Path(__file__).resolve().parent.parent / ".env",
