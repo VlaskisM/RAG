@@ -4,7 +4,6 @@ from typing import List, Tuple
 from src.config import settings
 from src.schemas import BlockType, Chunk, ChunkMetadata, RetrievedChunk
 from src.services.embeding_service import EmbeddingServiceInterface
-from src.services.chunker_service import ChunkerServiceInterface
 from src.promts.prompt_ask import ask_prompt
 
 
@@ -14,7 +13,6 @@ class QueryService:
         client,
         store,
         embedding_service: EmbeddingServiceInterface,
-        chunker_service: ChunkerServiceInterface,
     ):
         self._client = client
         self._store = store

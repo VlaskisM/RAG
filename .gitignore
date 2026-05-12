@@ -4,3 +4,4 @@ MASTER.md
 .vscode/
 __pycache__/
 textbook_rag_pipeline.md
+exports/

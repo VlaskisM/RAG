@@ -12,13 +12,11 @@ from src.services.chunker_service import ChunkerService
 from src.services.document_conversion_service import DocumentConversionService
 
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     client = AsyncOpenAI(
         api_key=settings.openai_api_key,
-        base_url=settings.openai_base_url,
-        timeout=10
+        base_url=settings.openai_base_url
     )
 
     store = ElasticsearchVectorStore(
@@ -32,16 +30,15 @@ async def lifespan(app: FastAPI):
         client=client,
         store=store,
         embedding_service=EmbeddingService(client=client),
-        chunker_service=ChunkerService()
     )
 
     app.state.data_loading_service = DataLoadingService(
-        client=client,
         store=store,
         embedding_service=EmbeddingService(client=client),
         chunker_service=ChunkerService(),
         document_conversion_service=DocumentConversionService()
     )
+
     yield
 
 

@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     embedding_model: str
     batch_size: int
 
+    # Если задан — после конвертации PDF сохраняет markdown-файл в эту папку.
+    # Оставьте пустым или не указывайте, чтобы отключить.
+    markdown_export_dir: Path | None = None
+
     model_config = SettingsConfigDict(
         env_file=Path(__file__).resolve().parent.parent / ".env",
         extra="ignore",

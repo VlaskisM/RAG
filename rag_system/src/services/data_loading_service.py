@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+
 from fastapi import UploadFile
 
 from src.services.document_conversion_service import DocumentConversionServiceInterface
@@ -16,13 +17,11 @@ class DataLoadingServiceInterface(ABC):
 class DataLoadingService(DataLoadingServiceInterface):
     def __init__(
         self,
-        client,
         store,
         embedding_service: EmbeddingServiceInterface,
         chunker_service: ChunkerServiceInterface,
         document_conversion_service: DocumentConversionServiceInterface,
     ):
-        self._client = client
         self._store = store
         self._embedding_service = embedding_service
         self._chunker_service = chunker_service

@@ -45,6 +45,7 @@ class ElasticsearchVectorStore(ElasticsearchVectorStoreInterface):
                         "author":         {"type": "keyword"},
                         "block_type":     {"type": "keyword"},
                         "language":       {"type": "keyword"},
+                        "part_title":     {"type": "text"},
                         "chapter_title":  {"type": "text"},
                         "section_title":  {"type": "text"},
                         "listing_number": {"type": "keyword"},

@@ -51,6 +51,7 @@ from pydantic import BaseModel
 
 
 class BlockType(str, Enum):
+    PART       = "part"
     CHAPTER    = "chapter"
     SECTION    = "section"
     CODE       = "code"
@@ -62,28 +63,28 @@ class BlockType(str, Enum):
     TEXT       = "text"
 
 
-
 class Block(BaseModel):
     type: BlockType
     content: str
-    language: str | None = None         
-    listing_number: str | None = None   
+    language: str | None = None
+    listing_number: str | None = None
 
 
 class ChunkMetadata(BaseModel):
     book: str
     author: str | None = None
+    part_title: str = ""
     chapter_title: str = ""
     section_title: str = ""
     block_type: BlockType
-    language: str | None = None         
+    language: str | None = None
     listing_number: str | None = None
-    page: int | None = None             
+    page: int | None = None
 
 
 class Chunk(BaseModel):
     chunk_id: str
-    text: str                           
+    text: str
     metadata: ChunkMetadata
 
 
