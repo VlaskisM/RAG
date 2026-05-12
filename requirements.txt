@@ -1,0 +1,9 @@
+openai==2.7.0
+elasticsearch==8.19.0
+pydantic
+pydantic-settings
+uvicorn==0.38.0
+fastapi==0.121.0
+pymupdf4llm>=0.0.17
+python-multipart
+aiohttp>=3.9.0
