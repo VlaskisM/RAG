@@ -1,42 +1,89 @@
+import logging
+import time
 import uuid
 from typing import List, Tuple
 
 from src.config import settings
 from src.schemas import BlockType, Chunk, ChunkMetadata, RetrievedChunk
 from src.services.embeding_service import EmbeddingServiceInterface
+from src.services.llm_service import LLMServiceInterface
+from src.services.reranker_service import RerankerServiceInterface
 from src.promts.prompt_ask import ask_prompt
+
+
+logger = logging.getLogger(__name__)
 
 
 class QueryService:
     def __init__(
         self,
-        client,
         store,
         embedding_service: EmbeddingServiceInterface,
+        llm_service: LLMServiceInterface,
+        reranker_service: RerankerServiceInterface | None = None,
     ):
-        self._client = client
         self._store = store
         self._embedding_service = embedding_service
+        self._llm_service = llm_service
+        self._reranker_service = reranker_service
 
     async def ask(self, question: str) -> Tuple[str, List[RetrievedChunk]]:
+        total_start = time.perf_counter()
+        embed_ms = search_ms = rerank_ms = llm_ms = 0.0
+        retrieved_count = 0
+        reranked_count = 0
+
         query_chunk = Chunk(
             chunk_id=str(uuid.uuid4()),
             text=question,
             metadata=ChunkMetadata(book="", block_type=BlockType.TEXT),
         )
+
+        stage_start = time.perf_counter()
         embedded = await self._embedding_service.embed([query_chunk])
-        chunks = await self._store.search(embedded[0].embedding, settings.top_k)
+        embed_ms = (time.perf_counter() - stage_start) * 1000
 
-        context = "\n\n".join(f"[{i+1}] {c.text}" for i, c in enumerate(chunks))
-
-        chat = await self._client.chat.completions.create(
-            model=settings.llm_model,
-            temperature=0,
-            messages=[
-                {"role": "system", "content": ask_prompt(context)},
-                {"role": "user", "content": f"Вопрос пользователя: {question}"},
-            ],
+        stage_start = time.perf_counter()
+        chunks = await self._store.search(
+            query_text=question,
+            query_vector=embedded[0].embedding,
+            k=settings.retrieval_k,
+            dense_k=settings.dense_k,
+            sparse_k=settings.sparse_k,
+            num_candidates=settings.num_candidates,
+            rrf_k=settings.rrf_k,
         )
+        search_ms = (time.perf_counter() - stage_start) * 1000
+        retrieved_count = len(chunks)
 
-        answer = chat.choices[0].message.content or "Я не знаю."
-        return answer, chunks
+        if self._reranker_service is not None:
+            stage_start = time.perf_counter()
+            chunks = await self._reranker_service.rerank(question, chunks)
+            rerank_ms = (time.perf_counter() - stage_start) * 1000
+        reranked_count = len(chunks)
+
+        final_chunks = chunks[:settings.top_k]
+
+        context = "\n\n".join(f"[{i+1}] {c.text}" for i, c in enumerate(final_chunks))
+
+        stage_start = time.perf_counter()
+        answer = await self._llm_service.answer(
+            prompt=ask_prompt(context),
+            question=question,
+        )
+        llm_ms = (time.perf_counter() - stage_start) * 1000
+
+        total_ms = (time.perf_counter() - total_start) * 1000
+        logger.info(
+            "Query processed: embed_ms=%.2f search_ms=%.2f rerank_ms=%.2f "
+            "llm_ms=%.2f total_ms=%.2f retrieved=%s reranked=%s final=%s",
+            embed_ms,
+            search_ms,
+            rerank_ms,
+            llm_ms,
+            total_ms,
+            retrieved_count,
+            reranked_count,
+            len(final_chunks),
+        )
+        return answer, final_chunks
