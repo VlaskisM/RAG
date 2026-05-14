@@ -1,5 +1,5 @@
+import hashlib
 import re
-import uuid
 import asyncio
 from abc import ABC, abstractmethod
 from typing import List
@@ -47,12 +47,32 @@ class ChunkerService(ChunkerServiceInterface):
     
 
     def _parse_blocks(self, markdown: str) -> List[Block]:
-        raw_blocks = re.split(r'\n{2,}', markdown.strip())
-        return [
-            self._classify(raw.strip())
-            for raw in raw_blocks
-            if raw.strip()
-        ]
+        raw_blocks: List[str] = []
+        current: List[str] = []
+        in_code = False
+        fence_re = re.compile(r'^```')
+
+        for line in markdown.splitlines():
+            if fence_re.match(line):
+                current.append(line)
+                in_code = not in_code
+                continue
+
+            if in_code:
+                current.append(line)
+                continue
+
+            if not line.strip():
+                if current:
+                    raw_blocks.append("\n".join(current).strip())
+                    current = []
+            else:
+                current.append(line)
+
+        if current:
+            raw_blocks.append("\n".join(current).strip())
+
+        return [self._classify(raw) for raw in raw_blocks if raw]
 
     def _classify(self, text: str) -> Block:
         
@@ -197,7 +217,15 @@ class ChunkerService(ChunkerServiceInterface):
                 last_text_tail = ""
 
             chunks.append(Chunk(
-                chunk_id=str(uuid.uuid4()),
+                chunk_id=self._make_chunk_id(
+                    book=book,
+                    author=author,
+                    part=current_part,
+                    chapter=current_chapter,
+                    section=current_section,
+                    listing=listing_number,
+                    text=text,
+                ),
                 text=text,
                 metadata=ChunkMetadata(
                     book=book,
@@ -282,4 +310,17 @@ class ChunkerService(ChunkerServiceInterface):
     
     def _token_estimate(self, text: str) -> int:
         return len(text) // 4
+
+    def _make_chunk_id(
+        self,
+        book: str,
+        author: str | None,
+        part: str,
+        chapter: str,
+        section: str,
+        listing: str | None,
+        text: str,
+    ) -> str:
+        key = "|".join([book, author or "", part, chapter, section, listing or "", text])
+        return hashlib.sha1(key.encode("utf-8")).hexdigest()
 
