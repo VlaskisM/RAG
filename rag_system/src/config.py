@@ -12,17 +12,17 @@ class Settings(BaseSettings):
     max_tokens_chunk: int
     chunk_overlap: int
     top_k: int
-    retrieval_k: int = 40
-    dense_k: int = 40
-    sparse_k: int = 40
-    num_candidates: int = 300
-    rrf_k: int = 60
+    retrieval_k: int
+    dense_k: int
+    sparse_k: int
+    num_candidates: int
+    rrf_k: int
     llm_model: str
     embedding_model: str
     batch_size: int
-    enable_reranker: bool = True
-    reranker_model: str = "BAAI/bge-reranker-v2-m3"
-    reranker_batch_size: int = 16
+    enable_reranker: bool
+    reranker_model: str
+    reranker_batch_size: int
 
 
     model_config = SettingsConfigDict(

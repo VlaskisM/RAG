@@ -25,7 +25,9 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    
     logger.info("Starting RAG System")
+
     client = AsyncOpenAI(
         api_key=settings.openai_api_key,
         base_url=settings.openai_base_url
