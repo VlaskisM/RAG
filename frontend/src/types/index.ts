@@ -1,8 +1,10 @@
 export type Role = 'user' | 'assistant';
 
-export type FileType = 'pdf' | 'docx' | 'xlsx' | 'md' | 'html' | string;
+export type FileType = 'pdf' | 'docx' | 'xlsx' | 'txt' | 'csv' | 'md' | 'html' | string;
 
 export type DocumentCategory = string;
+
+export type DocumentStatus = 'uploaded' | 'processing' | 'indexed' | 'failed';
 
 export interface KnowledgeDocument {
   id: string;
@@ -14,6 +16,9 @@ export interface KnowledgeDocument {
   pages?: number;
   owner: string;
   summary: string;
+  status?: DocumentStatus;
+  size?: number;
+  chunks?: number;
 }
 
 export interface AnswerSource {
@@ -70,3 +75,17 @@ export interface UserProfile {
   avatarUrl?: string;
   settings?: UserSettings;
 }
+
+export interface NotificationSettings {
+  emailDigest: boolean;
+  sourceUpdates: boolean;
+  failedUploads: boolean;
+}
+
+export type AppRoute =
+  | '/login'
+  | '/register'
+  | '/dashboard'
+  | '/chat'
+  | '/documents'
+  | '/settings';
