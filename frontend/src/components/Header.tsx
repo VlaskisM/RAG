@@ -1,4 +1,4 @@
-import { Bell, Library, ShieldCheck } from 'lucide-react';
+import { Library, ShieldCheck } from 'lucide-react';
 import type { UserProfile } from '../types';
 import { ThemeToggle } from './ThemeToggle';
 import { IconButton } from './ui/IconButton';
@@ -20,7 +20,7 @@ export function Header({ theme, onToggleTheme, onOpenDocuments, user }: HeaderPr
           </div>
           <div>
             <p className="text-sm font-semibold text-slate-950 dark:text-white">
-              Knowledge RAG
+              Knowledge-Ai
             </p>
             <p className="hidden text-xs text-slate-500 dark:text-slate-400 sm:block">
               Поиск по корпоративной базе знаний
@@ -38,9 +38,6 @@ export function Header({ theme, onToggleTheme, onOpenDocuments, user }: HeaderPr
           <Library size={18} />
         </IconButton>
         <ThemeToggle theme={theme} onToggle={onToggleTheme} />
-        <IconButton label="Уведомления">
-          <Bell size={18} />
-        </IconButton>
         <button className="flex min-w-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5 shadow-sm transition hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-xs font-semibold text-white dark:bg-white dark:text-slate-950">
             {user.name

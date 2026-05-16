@@ -1,4 +1,4 @@
-import { MessageSquarePlus, Trash2 } from 'lucide-react';
+import { MessageSquarePlus, PanelLeftClose, PanelLeftOpen, Trash2 } from 'lucide-react';
 import type { ChatSummary } from '../types';
 import { cn, formatDate } from '../lib/utils';
 
@@ -8,6 +8,8 @@ interface ChatListProps {
   onCreate: () => void;
   onSelect: (chatId: number) => void;
   onDelete: (chatId: number) => void;
+  isCollapsed: boolean;
+  onToggleCollapsed: () => void;
   isCreating?: boolean;
 }
 
@@ -17,11 +19,53 @@ export function ChatList({
   onCreate,
   onSelect,
   onDelete,
+  isCollapsed,
+  onToggleCollapsed,
   isCreating,
 }: ChatListProps) {
+  if (isCollapsed) {
+    return (
+      <aside className="flex h-full w-[56px] shrink-0 flex-col items-center gap-2 border-r border-slate-200 bg-white px-2 py-3 dark:border-slate-800 dark:bg-slate-950">
+        <button
+          type="button"
+          onClick={onToggleCollapsed}
+          className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-950 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-900 dark:hover:text-white"
+          aria-label="Показать список чатов"
+          title="Показать список чатов"
+        >
+          <PanelLeftOpen size={18} />
+        </button>
+        <button
+          type="button"
+          onClick={onCreate}
+          disabled={isCreating}
+          className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-600 text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
+          aria-label="Новый чат"
+          title="Новый чат"
+        >
+          <MessageSquarePlus size={18} />
+        </button>
+      </aside>
+    );
+  }
+
   return (
     <aside className="flex h-full w-full max-w-[260px] flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
-      <div className="border-b border-slate-200 p-3 dark:border-slate-800">
+      <div className="space-y-2 border-b border-slate-200 p-3 dark:border-slate-800">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            Чаты
+          </p>
+          <button
+            type="button"
+            onClick={onToggleCollapsed}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+            aria-label="Скрыть список чатов"
+            title="Скрыть список чатов"
+          >
+            <PanelLeftClose size={17} />
+          </button>
+        </div>
         <button
           type="button"
           onClick={onCreate}

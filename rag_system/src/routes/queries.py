@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/query", tags=["query"])
 
 
+def _has_source_fragment(chunk) -> bool:
+    return bool((chunk.text or "").strip() and (chunk.metadata.book or "").strip())
+
+
 @router.post("/", response_model=QueryResponse)
 async def ask_query(
     request: Request,
@@ -24,6 +28,7 @@ async def ask_query(
 ):
     try:
         answer, chunks = await request.app.state.query_service.ask(payload.question)
+        source_chunks = [chunk for chunk in chunks if _has_source_fragment(chunk)]
         result = await session.execute(
             select(UserSettings).where(UserSettings.user_id == current_user.id)
         )
@@ -34,7 +39,7 @@ async def ask_query(
                     user_id=current_user.id,
                     question=payload.question,
                     answer=answer,
-                    source_count=len(chunks),
+                    source_count=len(source_chunks),
                 )
             )
             await session.commit()
@@ -54,7 +59,7 @@ async def ask_query(
                     section=c.metadata.section_title,
                     block_type=c.metadata.block_type,
                 )
-                for c in chunks
+                for c in source_chunks
             ],
         )
     except HTTPException:

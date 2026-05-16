@@ -13,6 +13,7 @@ import { createId } from './utils';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
 const TOKEN_STORAGE_KEY = 'knowledge-rag-token';
+const MIN_SOURCE_RELEVANCE = 0.4;
 
 interface BackendSource {
   fileName?: string;
@@ -163,14 +164,34 @@ function sourceSection(source: BackendSource) {
   return source.section || source.chapter || source.part || source.block_type || undefined;
 }
 
+function hasSourceFragment(source: ApiAnswerResponse['sources'][number]) {
+  return Boolean(source.fileName.trim() && source.snippet.trim());
+}
+
+function relevanceRatio(value?: number) {
+  if (typeof value !== 'number') {
+    return undefined;
+  }
+
+  return value > 1 ? value / 100 : value;
+}
+
+function hasMinimumSourceRelevance(source: ApiAnswerResponse['sources'][number]) {
+  const ratio = relevanceRatio(source.relevance);
+  return typeof ratio !== 'number' || ratio >= MIN_SOURCE_RELEVANCE;
+}
+
 function mapSources(sources: BackendSource[]): ApiAnswerResponse['sources'] {
-  return sources.map((source) => ({
-    fileName: source.fileName || source.book || 'Документ базы знаний',
-    snippet: source.text ?? source.snippet ?? '',
-    page: source.page ?? undefined,
-    section: sourceSection(source),
-    relevance: source.score,
-  }));
+  return sources
+    .map((source) => ({
+      fileName: source.fileName || source.book || '',
+      snippet: source.text ?? source.snippet ?? '',
+      page: source.page ?? undefined,
+      section: sourceSection(source),
+      relevance: source.score,
+    }))
+    .filter(hasSourceFragment)
+    .filter(hasMinimumSourceRelevance);
 }
 
 function mapChatMessage(message: BackendChatMessage): ChatMessage {
@@ -320,7 +341,7 @@ export function enrichSources(
   sources: ApiAnswerResponse['sources'],
   documents: KnowledgeDocument[] = [],
 ): AnswerSource[] {
-  return sources.map((source) => {
+  return sources.filter(hasSourceFragment).filter(hasMinimumSourceRelevance).map((source) => {
     const document = documents.find((item) => item.fileName === source.fileName);
     const documentId = document?.id ?? source.fileName;
 

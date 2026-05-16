@@ -21,7 +21,12 @@ export function ChatMessage({ message, onOpenSource }: ChatMessageProps) {
         </div>
       ) : null}
 
-      <div className={cn('max-w-[820px] flex-1', isUser && 'flex max-w-[680px] justify-end')}>
+      <div
+        className={cn(
+          'max-w-[820px] flex-1',
+          isUser && 'flex max-w-[680px] flex-col items-end',
+        )}
+      >
         <div
           className={cn(
             'rounded-lg px-4 py-3 shadow-sm',
@@ -48,7 +53,7 @@ export function ChatMessage({ message, onOpenSource }: ChatMessageProps) {
           )}
         </div>
 
-        <div className={cn('mt-2 text-xs text-slate-400', isUser && 'text-right')}>
+        <div className={cn('mt-2 text-xs text-slate-400', isUser && 'pr-1 text-right')}>
           {formatTime(message.createdAt)}
         </div>
 

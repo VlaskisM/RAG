@@ -55,7 +55,8 @@ export function relevanceLabel(value?: number) {
     return 'n/a';
   }
 
-  return `${Math.round(value * 100)}%`;
+  const ratio = value > 1 ? value / 100 : value;
+  return `${Math.round(ratio * 100)}%`;
 }
 
 export function createId(prefix: string) {

@@ -26,6 +26,25 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chats", tags=["chats"])
 
 
+def _has_source_fragment(chunk) -> bool:
+    return bool((chunk.text or "").strip() and (chunk.metadata.book or "").strip())
+
+
+def _source_payload(chunk) -> dict:
+    return {
+        "fileName": chunk.metadata.book or "",
+        "text": chunk.text,
+        "score": float(chunk.score),
+        "page": chunk.metadata.page,
+        "book": chunk.metadata.book or "",
+        "author": chunk.metadata.author,
+        "part": chunk.metadata.part_title or "",
+        "chapter": chunk.metadata.chapter_title or "",
+        "section": chunk.metadata.section_title or "",
+        "block_type": str(chunk.metadata.block_type) if chunk.metadata.block_type else None,
+    }
+
+
 def _summary(chat: Chat, message_count: int) -> ChatSummaryResponse:
     return ChatSummaryResponse(
         id=chat.id,
@@ -141,21 +160,7 @@ async def ask_in_chat(
         logger.exception("Error during chat ask")
         raise HTTPException(status_code=500, detail="Internal error")
 
-    sources_payload = [
-        {
-            "fileName": c.metadata.book or "",
-            "text": c.text,
-            "score": float(c.score),
-            "page": c.metadata.page,
-            "book": c.metadata.book or "",
-            "author": c.metadata.author,
-            "part": c.metadata.part_title or "",
-            "chapter": c.metadata.chapter_title or "",
-            "section": c.metadata.section_title or "",
-            "block_type": str(c.metadata.block_type) if c.metadata.block_type else None,
-        }
-        for c in chunks
-    ]
+    sources_payload = [_source_payload(c) for c in chunks if _has_source_fragment(c)]
 
     user_msg = ChatMessage(
         chat_id=chat.id,
@@ -167,7 +172,7 @@ async def ask_in_chat(
         chat_id=chat.id,
         role="assistant",
         content=answer,
-        sources_json=json.dumps(sources_payload, ensure_ascii=False),
+        sources_json=json.dumps(sources_payload, ensure_ascii=False) if sources_payload else None,
     )
     session.add_all([user_msg, assistant_msg])
 
@@ -184,7 +189,7 @@ async def ask_in_chat(
                 user_id=current_user.id,
                 question=payload.question,
                 answer=answer,
-                source_count=len(chunks),
+                source_count=len(sources_payload),
             )
         )
 

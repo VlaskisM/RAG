@@ -13,6 +13,23 @@ from src.promts.prompt_ask import ask_prompt
 logger = logging.getLogger(__name__)
 
 
+NO_CONTEXT_MARKERS = (
+    "информация отсутствует",
+    "В предоставленных фрагментах книги эта информация отсутствует.",
+    "в предоставленных фрагментах книги эта информация отсутствует",
+    "в предоставленных фрагментах эта информация отсутствует",
+    "в контексте нет",
+    "не найдено",
+    "не нашёл",
+    "не нашел",
+)
+
+
+def _answer_has_no_context(answer: str) -> bool:
+    normalized = answer.lower().replace("ё", "е")
+    return any(marker.replace("ё", "е") in normalized for marker in NO_CONTEXT_MARKERS)
+
+
 class QueryService:
     def __init__(
         self,
@@ -65,6 +82,9 @@ class QueryService:
             question=question,
         )
         llm_ms = (time.perf_counter() - stage_start) * 1000
+
+        if _answer_has_no_context(answer):
+            final_chunks = []
 
         total_ms = (time.perf_counter() - total_start) * 1000
         logger.info(

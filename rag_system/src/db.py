@@ -2,6 +2,7 @@ from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy import text
 
 from src.config import settings
 
@@ -24,3 +25,12 @@ async def init_db() -> None:
 
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
+        await connection.execute(
+            text(
+                """
+                ALTER TABLE users
+                ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)
+                NOT NULL DEFAULT 'legacy-password-hash'
+                """
+            )
+        )

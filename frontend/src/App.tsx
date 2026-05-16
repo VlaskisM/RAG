@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AppShell } from './components/AppShell';
 import { DocumentSidebar } from './components/DocumentSidebar';
 import { ChatList } from './components/ChatList';
+import { HighlightedSnippetModal } from './components/HighlightedSnippetModal';
 import { useTheme } from './hooks/useTheme';
 import {
   ApiError,
@@ -36,6 +37,10 @@ import type {
 } from './types';
 
 const notificationsStorageKey = 'knowledge-rag-notifications';
+const chatListCollapsedStorageKey = 'knowledge-rag-chat-list-collapsed';
+const documentListCollapsedStorageKey = 'knowledge-rag-document-list-collapsed';
+const appSidebarCollapsedStorageKey = 'knowledge-rag-sidebar-collapsed';
+const documentMetadataStorageKey = 'knowledge-rag-document-metadata';
 
 const routeTitles: Record<AppRoute, { title: string; description: string }> = {
   '/login': { title: 'Login', description: 'Вход в аккаунт' },
@@ -45,7 +50,7 @@ const routeTitles: Record<AppRoute, { title: string; description: string }> = {
     description: 'Обзор документов, запросов и последних действий',
   },
   '/chat': {
-    title: 'RAG Chat',
+    title: 'Chats',
     description: 'Задавайте вопросы и проверяйте источники ответа',
   },
   '/documents': {
@@ -83,6 +88,107 @@ interface UploadingDocument extends KnowledgeDocument {
   localKey: string;
 }
 
+type DocumentMetadataCache = Record<
+  string,
+  Partial<KnowledgeDocument>
+>;
+
+function stripKnownExtension(value: string) {
+  return value.replace(/\.(pdf|docx|xlsx|txt|csv|md|html)$/i, '');
+}
+
+function documentMergeKey(document: KnowledgeDocument) {
+  return stripKnownExtension(document.fileName || document.title || document.id)
+    .trim()
+    .toLowerCase();
+}
+
+function readDocumentMetadataCache(): DocumentMetadataCache {
+  return readJson<DocumentMetadataCache>(documentMetadataStorageKey, {});
+}
+
+function readStoredDocumentMetadata(document: KnowledgeDocument) {
+  return readDocumentMetadataCache()[documentMergeKey(document)];
+}
+
+function saveDocumentMetadata(document: KnowledgeDocument) {
+  const key = documentMergeKey(document);
+  if (!key) {
+    return;
+  }
+
+  const cache = readDocumentMetadataCache();
+  cache[key] = {
+    fileName: document.fileName,
+    owner: document.owner,
+    size: document.size,
+    type: document.type,
+    uploadedAt: document.uploadedAt,
+  };
+  localStorage.setItem(documentMetadataStorageKey, JSON.stringify(cache));
+}
+
+function removeDocumentMetadata(document: KnowledgeDocument) {
+  const key = documentMergeKey(document);
+  if (!key) {
+    return;
+  }
+
+  const cache = readDocumentMetadataCache();
+  delete cache[key];
+  localStorage.setItem(documentMetadataStorageKey, JSON.stringify(cache));
+}
+
+function mergeDocumentMetadata(
+  serverDocument: KnowledgeDocument,
+  localDocument?: KnowledgeDocument,
+): KnowledgeDocument {
+  const preservedDocument = {
+    ...readStoredDocumentMetadata(serverDocument),
+    ...localDocument,
+  };
+
+  if (!preservedDocument.fileName && !preservedDocument.uploadedAt && !preservedDocument.size) {
+    return {
+      ...serverDocument,
+      status: serverDocument.status ?? 'indexed',
+    };
+  }
+
+  return {
+    ...serverDocument,
+    fileName: preservedDocument.fileName || serverDocument.fileName,
+    title: serverDocument.title || preservedDocument.title || serverDocument.fileName,
+    type: preservedDocument.type || serverDocument.type,
+    category: serverDocument.category || preservedDocument.category || 'Knowledge',
+    uploadedAt: serverDocument.uploadedAt ?? preservedDocument.uploadedAt,
+    pages: serverDocument.pages ?? preservedDocument.pages,
+    owner: serverDocument.owner || preservedDocument.owner || '',
+    summary: serverDocument.summary || preservedDocument.summary || '',
+    status: serverDocument.status ?? preservedDocument.status ?? 'indexed',
+    size: serverDocument.size ?? preservedDocument.size,
+    chunks: serverDocument.chunks ?? preservedDocument.chunks,
+  };
+}
+
+function mergeDocuments(
+  serverDocuments: KnowledgeDocument[],
+  currentDocuments: KnowledgeDocument[],
+) {
+  const currentByKey = new Map(
+    currentDocuments.map((document) => [documentMergeKey(document), document]),
+  );
+  const serverKeys = new Set(serverDocuments.map(documentMergeKey));
+  const mergedServerDocuments = serverDocuments.map((document) =>
+    mergeDocumentMetadata(document, currentByKey.get(documentMergeKey(document))),
+  );
+  const localOnlyDocuments = currentDocuments.filter(
+    (document) => !serverKeys.has(documentMergeKey(document)),
+  );
+
+  return [...mergedServerDocuments, ...localOnlyDocuments];
+}
+
 export default function App() {
   const { theme, setTheme, toggleTheme } = useTheme();
   const [route, setRoute] = useState<AppRoute>(currentPath);
@@ -98,6 +204,15 @@ export default function App() {
   );
 
   const [chats, setChats] = useState<ChatSummary[]>([]);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() =>
+    readJson<boolean>(appSidebarCollapsedStorageKey, false),
+  );
+  const [isChatListCollapsed, setIsChatListCollapsed] = useState(() =>
+    readJson<boolean>(chatListCollapsedStorageKey, false),
+  );
+  const [isDocumentListCollapsed, setIsDocumentListCollapsed] = useState(() =>
+    readJson<boolean>(documentListCollapsedStorageKey, false),
+  );
   const [activeChatId, setActiveChatId] = useState<number | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -144,6 +259,27 @@ export default function App() {
   }, [notifications]);
 
   useEffect(() => {
+    localStorage.setItem(
+      appSidebarCollapsedStorageKey,
+      JSON.stringify(isSidebarCollapsed),
+    );
+  }, [isSidebarCollapsed]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      chatListCollapsedStorageKey,
+      JSON.stringify(isChatListCollapsed),
+    );
+  }, [isChatListCollapsed]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      documentListCollapsedStorageKey,
+      JSON.stringify(isDocumentListCollapsed),
+    );
+  }, [isDocumentListCollapsed]);
+
+  useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
@@ -169,7 +305,9 @@ export default function App() {
   const refreshDocuments = useCallback(async () => {
     try {
       const docs = await getDocuments();
-      setKnowledgeDocuments(docs);
+      setKnowledgeDocuments((currentDocuments) =>
+        mergeDocuments(docs, currentDocuments),
+      );
     } catch {
       // ignore — user may have just logged out
     }
@@ -281,7 +419,7 @@ export default function App() {
     }
   };
 
-  const handleAsk = async (question: string) => {
+  const handleAsk = async (question: string, codeReviewMode = false) => {
     if (isLoading) {
       return;
     }
@@ -310,19 +448,27 @@ export default function App() {
     setIsLoading(true);
 
     try {
-      const response = await askInChat(chatId, question);
+      const backendQuestion = codeReviewMode
+        ? [
+            'Режим Code Review включен.',
+            'Проанализируй вопрос как senior reviewer: сначала укажи проблемы, риски, регрессии и недостающие проверки, затем коротко предложи исправления.',
+            '',
+            question,
+          ].join('\n')
+        : question;
+      const response = await askInChat(chatId, backendQuestion);
       setMessages((current) => {
         const filtered = current.filter(
           (msg) =>
             msg.id !== placeholderId &&
             !(msg.role === 'user' && msg.content === question && msg.id.startsWith('local-user-')),
         );
-        return [...filtered, response.userMessage, response.assistantMessage];
+        return [
+          ...filtered,
+          { ...response.userMessage, content: question },
+          response.assistantMessage,
+        ];
       });
-
-      if (response.assistantMessage.sources?.[0]) {
-        handleOpenSource(response.assistantMessage.sources[0]);
-      }
 
       setChats((current) => {
         const without = current.filter((c) => c.id !== response.chat.id);
@@ -377,10 +523,8 @@ export default function App() {
       await apiDeleteChat(chatId);
       setChats((current) => current.filter((c) => c.id !== chatId));
       if (activeChatId === chatId) {
-        setActiveChatId((current) => {
-          const remaining = chats.filter((c) => c.id !== chatId);
-          return remaining[0]?.id ?? null;
-        });
+        const remaining = chats.filter((c) => c.id !== chatId);
+        setActiveChatId(remaining[0]?.id ?? null);
       }
       void refreshStats();
     } catch {
@@ -425,6 +569,38 @@ export default function App() {
       try {
         const book = ticket.title || file.name;
         const result = await uploadDocument(file, book, user?.name);
+        const indexedDocument: KnowledgeDocument = {
+          id: ticket.id,
+          fileName: ticket.fileName,
+          title: ticket.title,
+          type: ticket.type,
+          category: ticket.category,
+          uploadedAt: ticket.uploadedAt,
+          owner: ticket.owner,
+          summary: `Проиндексировано ${result.chunks} фрагментов. Файл доступен в RAG-чате.`,
+          status: 'indexed',
+          size: ticket.size,
+          chunks: result.chunks,
+        };
+
+        saveDocumentMetadata(indexedDocument);
+        setKnowledgeDocuments((currentDocuments) => {
+          const existingIndex = currentDocuments.findIndex(
+            (document) =>
+              documentMergeKey(document) === documentMergeKey(indexedDocument),
+          );
+
+          if (existingIndex === -1) {
+            return [indexedDocument, ...currentDocuments];
+          }
+
+          const nextDocuments = [...currentDocuments];
+          nextDocuments[existingIndex] = mergeDocumentMetadata(
+            nextDocuments[existingIndex],
+            indexedDocument,
+          );
+          return nextDocuments;
+        });
         setKnowledgeUploadingStatus(ticket.localKey, 'indexed', {
           summary: `Проиндексировано ${result.chunks} фрагментов. Файл доступен в RAG-чате.`,
           chunks: result.chunks,
@@ -446,6 +622,10 @@ export default function App() {
   };
 
   const handleDeleteDocument = (documentId: string) => {
+    const deletedDocument = allDocuments.find((document) => document.id === documentId);
+    if (deletedDocument) {
+      removeDocumentMetadata(deletedDocument);
+    }
     setKnowledgeDocuments((currentDocuments) =>
       currentDocuments.filter((document) => document.id !== documentId),
     );
@@ -485,6 +665,8 @@ export default function App() {
       onNavigate={navigate}
       onToggleTheme={toggleTheme}
       onLogout={handleLogout}
+      isSidebarCollapsed={isSidebarCollapsed}
+      onToggleSidebar={() => setIsSidebarCollapsed((current) => !current)}
     >
       {activeRoute === '/dashboard' ? (
         <DashboardPage
@@ -504,6 +686,8 @@ export default function App() {
             onCreate={handleCreateChat}
             onSelect={handleSelectChat}
             onDelete={handleDeleteChat}
+            isCollapsed={isChatListCollapsed}
+            onToggleCollapsed={() => setIsChatListCollapsed((current) => !current)}
             isCreating={isCreatingChat}
           />
           <div className="min-w-0 flex-1">
@@ -512,13 +696,16 @@ export default function App() {
               messages={messages}
               isLoading={isLoading}
               selectedDocument={selectedDocument}
-              highlightedSnippet={highlightedSnippet}
+              isDocumentListCollapsed={isDocumentListCollapsed}
               onAsk={handleAsk}
               onOpenSource={handleOpenSource}
               onSelectDocument={(document) => {
                 setSelectedDocument(document);
                 setHighlightedSnippet(undefined);
               }}
+              onToggleDocumentList={() =>
+                setIsDocumentListCollapsed((current) => !current)
+              }
             />
           </div>
         </div>
@@ -549,11 +736,17 @@ export default function App() {
           <DocumentSidebar
             documents={allDocuments}
             selectedDocumentId={selectedDocument.id}
-            highlightedSnippet={highlightedSnippet}
             onSelectDocument={(document) => setSelectedDocument(document)}
           />
         ) : null}
       </div>
+      {activeRoute === '/chat' && highlightedSnippet ? (
+        <HighlightedSnippetModal
+          snippet={highlightedSnippet}
+          document={selectedDocument}
+          onClose={() => setHighlightedSnippet(undefined)}
+        />
+      ) : null}
     </AppShell>
   );
 }
