@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class DataLoadingServiceInterface(ABC):
 
     @abstractmethod
-    async def ingest(self, file: UploadFile, book: str, author: Optional[str] = None) -> None:
+    async def ingest(self, file: UploadFile, book: str, author: Optional[str] = None) -> int:
         pass
 
 
@@ -37,7 +37,7 @@ class DataLoadingService(DataLoadingServiceInterface):
     def store(self):
         return self._store
 
-    async def ingest(self, file: UploadFile, book: str, author: Optional[str] = None) -> None:
+    async def ingest(self, file: UploadFile, book: str, author: Optional[str] = None) -> int:
 
         start = time.perf_counter()
         logger.info(
@@ -47,7 +47,7 @@ class DataLoadingService(DataLoadingServiceInterface):
             author,
             getattr(file, "size", None),
         )
-        
+
         markdown = await self._document_conversion_service.convert(file)
         chunks = await self._chunker_service.chunk(markdown, book=book, author=author)
         embedded_chunks = await self._embedding_service.embed_documents(chunks)
@@ -59,3 +59,4 @@ class DataLoadingService(DataLoadingServiceInterface):
             len(chunks),
             (time.perf_counter() - start) * 1000,
         )
+        return len(chunks)

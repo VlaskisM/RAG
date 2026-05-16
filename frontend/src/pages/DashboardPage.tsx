@@ -6,9 +6,9 @@ import {
 } from 'lucide-react';
 import type {
   AppRoute,
-  ChatMessage,
   KnowledgeDocument,
   QueryHistoryItem,
+  StatsResponse,
   UserProfile,
 } from '../types';
 import { fileTypeLabel, formatDate } from '../lib/utils';
@@ -17,7 +17,7 @@ interface DashboardPageProps {
   user: UserProfile;
   documents: KnowledgeDocument[];
   history: QueryHistoryItem[];
-  messages: ChatMessage[];
+  stats: StatsResponse | null;
   onNavigate: (route: AppRoute) => void;
 }
 
@@ -25,13 +25,12 @@ export function DashboardPage({
   user,
   documents,
   history,
-  messages,
+  stats,
   onNavigate,
 }: DashboardPageProps) {
-  const sourceCount = messages.reduce(
-    (sum, message) => sum + (message.sources?.length ?? 0),
-    0,
-  );
+  const documentsCount = stats?.documents ?? documents.length;
+  const queriesCount = stats?.queries ?? history.length;
+  const sourcesCount = stats?.sourcesTotal ?? 0;
   const recentDocuments = documents.slice(0, 4);
   const recentQuestions = history.slice(0, 4);
 
@@ -75,17 +74,17 @@ export function DashboardPage({
           {[
             {
               label: 'Документы',
-              value: documents.length,
+              value: documentsCount,
               icon: FileText,
             },
             {
               label: 'Запросы',
-              value: history.length,
+              value: queriesCount,
               icon: MessageSquareText,
             },
             {
               label: 'Источники',
-              value: sourceCount,
+              value: sourcesCount,
               icon: SearchCheck,
             },
           ].map((item) => {

@@ -17,7 +17,7 @@ interface DocumentsPageProps {
   onDelete: (documentId: string) => void;
 }
 
-const acceptedTypes = ['pdf', 'docx', 'txt', 'csv'];
+const acceptedTypes = ['pdf'];
 
 const statusLabel: Record<DocumentStatus, string> = {
   uploaded: 'Uploaded',
@@ -117,7 +117,7 @@ export function DocumentsPage({
             ref={inputRef}
             type="file"
             multiple
-            accept=".pdf,.docx,.txt,.csv"
+            accept=".pdf"
             onChange={handleInputChange}
             className="hidden"
           />
@@ -128,8 +128,8 @@ export function DocumentsPage({
             Загрузите документы в базу знаний
           </h2>
           <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-500 dark:text-slate-400">
-            Перетащите PDF, DOCX, TXT или CSV сюда. После загрузки файл пройдет
-            mock-обработку и появится в источниках RAG-чата.
+            Перетащите PDF-файл сюда. Файл пройдёт конвертацию, чанкование и
+            индексацию в базе знаний RAG.
           </p>
           <button
             type="button"

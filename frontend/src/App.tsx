@@ -1,19 +1,22 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AppShell } from './components/AppShell';
 import { DocumentSidebar } from './components/DocumentSidebar';
-import {
-  chatMessages,
-  currentUser,
-  documents as mockDocuments,
-  queryHistory as mockQueryHistory,
-} from './data/mockData';
+import { ChatList } from './components/ChatList';
 import { useTheme } from './hooks/useTheme';
 import {
-  askKnowledgeBase,
-  enrichSources,
+  ApiError,
+  askInChat,
+  createChat as apiCreateChat,
+  deleteChat as apiDeleteChat,
+  fetchMe,
+  getChatMessages,
+  getChats,
   getDocuments,
+  getQueryHistory,
+  getStats,
+  logout as apiLogout,
+  uploadDocument,
 } from './lib/api';
-import { createId } from './lib/utils';
 import { AuthPage } from './pages/AuthPage';
 import { ChatPage } from './pages/ChatPage';
 import { DashboardPage } from './pages/DashboardPage';
@@ -23,21 +26,20 @@ import type {
   AnswerSource,
   AppRoute,
   ChatMessage,
+  ChatSummary,
   DocumentStatus,
   KnowledgeDocument,
   NotificationSettings,
   QueryHistoryItem,
+  StatsResponse,
   UserProfile,
 } from './types';
 
-const authStorageKey = 'knowledge-rag-user';
-const documentsStorageKey = 'knowledge-rag-documents';
-const historyStorageKey = 'knowledge-rag-history';
 const notificationsStorageKey = 'knowledge-rag-notifications';
 
 const routeTitles: Record<AppRoute, { title: string; description: string }> = {
-  '/login': { title: 'Login', description: 'Mock authentication' },
-  '/register': { title: 'Register', description: 'Create an account' },
+  '/login': { title: 'Login', description: 'Вход в аккаунт' },
+  '/register': { title: 'Register', description: 'Создание аккаунта' },
   '/dashboard': {
     title: 'Dashboard',
     description: 'Обзор документов, запросов и последних действий',
@@ -74,52 +76,55 @@ function readJson<T>(key: string, fallback: T): T {
 function currentPath(): AppRoute {
   const path = window.location.pathname as AppRoute;
   const knownRoutes = Object.keys(routeTitles) as AppRoute[];
-
   return knownRoutes.includes(path) ? path : '/dashboard';
 }
 
-function fileType(fileName: string) {
-  return fileName.split('.').pop()?.toLowerCase() || 'txt';
+interface UploadingDocument extends KnowledgeDocument {
+  localKey: string;
 }
 
 export default function App() {
   const { theme, setTheme, toggleTheme } = useTheme();
   const [route, setRoute] = useState<AppRoute>(currentPath);
-  const [user, setUser] = useState<UserProfile | null>(() =>
-    readJson<UserProfile | null>(authStorageKey, null),
-  );
-  const [knowledgeDocuments, setKnowledgeDocuments] = useState<KnowledgeDocument[]>(
-    () => readJson<KnowledgeDocument[]>(documentsStorageKey, mockDocuments),
-  );
-  const [history, setHistory] = useState<QueryHistoryItem[]>(() =>
-    readJson<QueryHistoryItem[]>(historyStorageKey, mockQueryHistory),
-  );
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [bootstrapping, setBootstrapping] = useState(true);
+
+  const [knowledgeDocuments, setKnowledgeDocuments] = useState<KnowledgeDocument[]>([]);
+  const [uploadingDocs, setUploadingDocs] = useState<UploadingDocument[]>([]);
+  const [history, setHistory] = useState<QueryHistoryItem[]>([]);
+  const [stats, setStats] = useState<StatsResponse | null>(null);
   const [notifications, setNotifications] = useState<NotificationSettings>(() =>
     readJson<NotificationSettings>(notificationsStorageKey, defaultNotifications),
   );
-  const [messages, setMessages] = useState<ChatMessage[]>(chatMessages);
+
+  const [chats, setChats] = useState<ChatSummary[]>([]);
+  const [activeChatId, setActiveChatId] = useState<number | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedDocument, setSelectedDocument] = useState<KnowledgeDocument | undefined>(
-    knowledgeDocuments[0],
-  );
+  const [isCreatingChat, setIsCreatingChat] = useState(false);
+
+  const [selectedDocument, setSelectedDocument] = useState<KnowledgeDocument | undefined>();
   const [highlightedSnippet, setHighlightedSnippet] = useState<string | undefined>();
+
+  const allDocuments = useMemo(
+    () => [...uploadingDocs, ...knowledgeDocuments],
+    [uploadingDocs, knowledgeDocuments],
+  );
 
   const activeRoute = useMemo(() => {
     if (!user && route !== '/login' && route !== '/register') {
       return '/login';
     }
-
     if (user && (route === '/login' || route === '/register')) {
       return '/dashboard';
     }
-
     return route;
   }, [route, user]);
 
-  const navigate = (nextRoute: AppRoute) => {
+  const navigate = useCallback((nextRoute: AppRoute) => {
     window.history.pushState({}, '', nextRoute);
     setRoute(nextRoute);
-  };
+  }, []);
 
   useEffect(() => {
     const handlePopState = () => setRoute(currentPath());
@@ -135,39 +140,110 @@ export default function App() {
   }, [activeRoute, route]);
 
   useEffect(() => {
-    if (user) {
-      localStorage.setItem(authStorageKey, JSON.stringify(user));
-    } else {
-      localStorage.removeItem(authStorageKey);
-    }
-  }, [user]);
-
-  useEffect(() => {
-    localStorage.setItem(documentsStorageKey, JSON.stringify(knowledgeDocuments));
-  }, [knowledgeDocuments]);
-
-  useEffect(() => {
-    localStorage.setItem(historyStorageKey, JSON.stringify(history));
-  }, [history]);
-
-  useEffect(() => {
     localStorage.setItem(notificationsStorageKey, JSON.stringify(notifications));
   }, [notifications]);
 
   useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const profile = await fetchMe();
+        if (!cancelled) {
+          setUser(profile);
+        }
+      } catch {
+        if (!cancelled) {
+          setUser(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setBootstrapping(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const refreshDocuments = useCallback(async () => {
+    try {
+      const docs = await getDocuments();
+      setKnowledgeDocuments(docs);
+    } catch {
+      // ignore — user may have just logged out
+    }
+  }, []);
+
+  const refreshStats = useCallback(async () => {
+    try {
+      setStats(await getStats());
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const refreshHistory = useCallback(async () => {
+    try {
+      setHistory(await getQueryHistory());
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const refreshChats = useCallback(async () => {
+    try {
+      const list = await getChats();
+      setChats(list);
+      return list;
+    } catch {
+      return [];
+    }
+  }, []);
+
+  useEffect(() => {
     if (!user) {
+      setKnowledgeDocuments([]);
+      setHistory([]);
+      setStats(null);
+      setChats([]);
+      setMessages([]);
+      setActiveChatId(null);
       return;
     }
 
-    void getDocuments().then((loadedDocuments) => {
-      setKnowledgeDocuments((currentDocuments) => {
-        const uploadedDocuments = currentDocuments.filter(
-          (document) => !mockDocuments.some((mock) => mock.id === document.id),
-        );
-        return [...loadedDocuments, ...uploadedDocuments];
-      });
+    void refreshDocuments();
+    void refreshStats();
+    void refreshHistory();
+    void refreshChats().then((list) => {
+      if (list.length > 0) {
+        setActiveChatId((current) => current ?? list[0].id);
+      }
     });
-  }, [user]);
+  }, [user, refreshDocuments, refreshStats, refreshHistory, refreshChats]);
+
+  useEffect(() => {
+    if (!user || activeChatId == null) {
+      setMessages([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await getChatMessages(activeChatId);
+        if (!cancelled) {
+          setMessages(data.messages);
+        }
+      } catch {
+        if (!cancelled) {
+          setMessages([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, activeChatId]);
 
   const handleAuth = (nextUser: UserProfile) => {
     setUser(nextUser);
@@ -175,182 +251,217 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    apiLogout();
     setUser(null);
     navigate('/login');
   };
 
   const handleOpenSource = (source: AnswerSource) => {
-    const document = knowledgeDocuments.find(
+    const document = allDocuments.find(
       (item) => item.id === source.documentId || item.fileName === source.fileName,
     );
     setSelectedDocument(document);
     setHighlightedSnippet(source.snippet);
   };
 
-  const streamAssistantAnswer = async (
-    messageId: string,
-    content: string,
-    sources: AnswerSource[],
-  ) => {
-    const words = content.split(' ');
-    let visibleContent = '';
-
-    for (const word of words) {
-      visibleContent = visibleContent ? `${visibleContent} ${word}` : word;
-
-      setMessages((currentMessages) =>
-        currentMessages.map((message) =>
-          message.id === messageId
-            ? {
-                ...message,
-                content: visibleContent,
-                sources,
-                isStreaming: true,
-              }
-            : message,
-        ),
-      );
-
-      await new Promise((resolve) => window.setTimeout(resolve, 18));
+  const ensureActiveChat = async (): Promise<number | null> => {
+    if (activeChatId != null) {
+      return activeChatId;
     }
-
-    setMessages((currentMessages) =>
-      currentMessages.map((message) =>
-        message.id === messageId
-          ? {
-              ...message,
-              content,
-              sources,
-              isStreaming: false,
-            }
-          : message,
-      ),
-    );
+    try {
+      setIsCreatingChat(true);
+      const chat = await apiCreateChat();
+      setChats((current) => [chat, ...current]);
+      setActiveChatId(chat.id);
+      return chat.id;
+    } catch {
+      return null;
+    } finally {
+      setIsCreatingChat(false);
+    }
   };
 
   const handleAsk = async (question: string) => {
     if (isLoading) {
       return;
     }
+    const chatId = await ensureActiveChat();
+    if (chatId == null) {
+      return;
+    }
 
-    const userMessage: ChatMessage = {
-      id: createId('message'),
-      role: 'user',
-      content: question,
-      createdAt: new Date().toISOString(),
-    };
-    const assistantMessageId = createId('message');
-    const loadingMessage: ChatMessage = {
-      id: assistantMessageId,
-      role: 'assistant',
-      content: '',
-      createdAt: new Date().toISOString(),
-      isStreaming: true,
-    };
-
-    setMessages((currentMessages) => [...currentMessages, userMessage, loadingMessage]);
+    const placeholderId = `pending-${Date.now()}`;
+    setMessages((current) => [
+      ...current,
+      {
+        id: `local-user-${Date.now()}`,
+        role: 'user',
+        content: question,
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: placeholderId,
+        role: 'assistant',
+        content: '',
+        createdAt: new Date().toISOString(),
+        isStreaming: true,
+      },
+    ]);
     setIsLoading(true);
 
     try {
-      const response = await askKnowledgeBase(question, knowledgeDocuments);
-      const sources = enrichSources(response.sources, knowledgeDocuments);
+      const response = await askInChat(chatId, question);
+      setMessages((current) => {
+        const filtered = current.filter(
+          (msg) =>
+            msg.id !== placeholderId &&
+            !(msg.role === 'user' && msg.content === question && msg.id.startsWith('local-user-')),
+        );
+        return [...filtered, response.userMessage, response.assistantMessage];
+      });
 
-      await streamAssistantAnswer(assistantMessageId, response.answer, sources);
-
-      if (sources[0]) {
-        handleOpenSource(sources[0]);
+      if (response.assistantMessage.sources?.[0]) {
+        handleOpenSource(response.assistantMessage.sources[0]);
       }
 
-      setHistory((currentHistory) => [
-        {
-          id: createId('history'),
-          question,
-          answer: response.answer,
-          sourceCount: sources.length,
-          createdAt: new Date().toISOString(),
-        },
-        ...currentHistory,
-      ]);
-    } catch {
-      setMessages((currentMessages) =>
-        currentMessages.map((message) =>
-          message.id === assistantMessageId
-            ? {
-                ...message,
-                content:
-                  'Не удалось получить ответ от сервера. Проверьте подключение к API и попробуйте еще раз.',
-                isStreaming: false,
-              }
-            : message,
+      setChats((current) => {
+        const without = current.filter((c) => c.id !== response.chat.id);
+        return [response.chat, ...without];
+      });
+      void refreshStats();
+      void refreshHistory();
+    } catch (caught) {
+      const message =
+        caught instanceof ApiError && caught.status === 401
+          ? 'Сессия истекла. Войдите снова.'
+          : 'Не удалось получить ответ от сервера. Проверьте подключение к API и попробуйте ещё раз.';
+      setMessages((current) =>
+        current.map((msg) =>
+          msg.id === placeholderId
+            ? { ...msg, content: message, isStreaming: false }
+            : msg,
         ),
       );
+      if (caught instanceof ApiError && caught.status === 401) {
+        handleLogout();
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
-  const updateDocumentStatus = (documentId: string, status: DocumentStatus) => {
-    setKnowledgeDocuments((currentDocuments) =>
-      currentDocuments.map((document) =>
-        document.id === documentId ? { ...document, status } : document,
+  const handleCreateChat = async () => {
+    if (isCreatingChat) {
+      return;
+    }
+    try {
+      setIsCreatingChat(true);
+      const chat = await apiCreateChat();
+      setChats((current) => [chat, ...current]);
+      setActiveChatId(chat.id);
+      setMessages([]);
+      navigate('/chat');
+    } catch {
+      // ignore
+    } finally {
+      setIsCreatingChat(false);
+    }
+  };
+
+  const handleSelectChat = (chatId: number) => {
+    setActiveChatId(chatId);
+  };
+
+  const handleDeleteChat = async (chatId: number) => {
+    try {
+      await apiDeleteChat(chatId);
+      setChats((current) => current.filter((c) => c.id !== chatId));
+      if (activeChatId === chatId) {
+        setActiveChatId((current) => {
+          const remaining = chats.filter((c) => c.id !== chatId);
+          return remaining[0]?.id ?? null;
+        });
+      }
+      void refreshStats();
+    } catch {
+      // ignore
+    }
+  };
+
+  const setKnowledgeUploadingStatus = (localKey: string, status: DocumentStatus, patch?: Partial<KnowledgeDocument>) => {
+    setUploadingDocs((current) =>
+      current.map((doc) =>
+        doc.localKey === localKey ? { ...doc, ...patch, status } : doc,
       ),
     );
   };
 
-  const handleUpload = (files: File[]) => {
-    const uploadedDocuments = files.map<KnowledgeDocument>((file) => {
-      const type = fileType(file.name);
+  const handleUpload = async (files: File[]) => {
+    const tickets: UploadingDocument[] = files.map((file) => ({
+      localKey: `upload-${Date.now()}-${file.name}`,
+      id: `pending-${Date.now()}-${file.name}`,
+      fileName: file.name,
+      title: file.name.replace(/\.[^.]+$/, ''),
+      type: 'pdf',
+      category: 'Uploading',
+      uploadedAt: new Date().toISOString(),
+      owner: user?.name ?? '',
+      summary: 'Файл отправляется на сервер.',
+      status: 'uploaded',
+      size: file.size,
+      chunks: 0,
+    }));
 
-      return {
-        id: createId('doc'),
-        fileName: file.name,
-        title: file.name.replace(/\.[^.]+$/, ''),
-        type,
-        category: 'Uploaded',
-        uploadedAt: new Date().toISOString(),
-        owner: user?.name ?? currentUser.name,
-        summary: 'Файл загружен и ожидает обработки перед индексацией.',
-        status: 'uploaded',
-        size: file.size,
-        chunks: 0,
-      };
-    });
+    setUploadingDocs((current) => [...tickets, ...current]);
 
-    setKnowledgeDocuments((currentDocuments) => [
-      ...uploadedDocuments,
-      ...currentDocuments,
-    ]);
-
-    uploadedDocuments.forEach((document, index) => {
-      window.setTimeout(() => updateDocumentStatus(document.id, 'processing'), 500);
-      window.setTimeout(() => {
-        const shouldFail = document.fileName.toLowerCase().includes('fail');
-        setKnowledgeDocuments((currentDocuments) =>
-          currentDocuments.map((item) =>
-            item.id === document.id
-              ? {
-                  ...item,
-                  status: shouldFail ? 'failed' : 'indexed',
-                  chunks: shouldFail ? 0 : 24 + index * 7,
-                  summary: shouldFail
-                    ? 'Не удалось обработать файл. Проверьте формат и повторите загрузку.'
-                    : 'Файл обработан, разбит на фрагменты и доступен в RAG-чате.',
-                }
-              : item,
-          ),
-        );
-      }, 2200 + index * 400);
-    });
+    for (const ticket of tickets) {
+      const file = files.find((f) => f.name === ticket.fileName);
+      if (!file) {
+        continue;
+      }
+      setKnowledgeUploadingStatus(ticket.localKey, 'processing', {
+        summary: 'Сервер обрабатывает файл: конвертация, чанкование, эмбеддинги.',
+      });
+      try {
+        const book = ticket.title || file.name;
+        const result = await uploadDocument(file, book, user?.name);
+        setKnowledgeUploadingStatus(ticket.localKey, 'indexed', {
+          summary: `Проиндексировано ${result.chunks} фрагментов. Файл доступен в RAG-чате.`,
+          chunks: result.chunks,
+        });
+        setTimeout(() => {
+          setUploadingDocs((current) => current.filter((d) => d.localKey !== ticket.localKey));
+          void refreshDocuments();
+          void refreshStats();
+        }, 1500);
+      } catch (caught) {
+        const detail =
+          caught instanceof ApiError ? caught.message : 'Не удалось загрузить файл';
+        setKnowledgeUploadingStatus(ticket.localKey, 'failed', { summary: detail });
+        if (caught instanceof ApiError && caught.status === 401) {
+          handleLogout();
+        }
+      }
+    }
   };
 
   const handleDeleteDocument = (documentId: string) => {
     setKnowledgeDocuments((currentDocuments) =>
       currentDocuments.filter((document) => document.id !== documentId),
     );
+    setUploadingDocs((current) => current.filter((d) => d.id !== documentId));
     setSelectedDocument((currentDocument) =>
       currentDocument?.id === documentId ? undefined : currentDocument,
     );
   };
+
+  if (bootstrapping) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-slate-50 text-sm text-slate-500 dark:bg-slate-950 dark:text-slate-400">
+        Загрузка…
+      </main>
+    );
+  }
 
   if (activeRoute === '/login' || activeRoute === '/register') {
     return (
@@ -369,7 +480,7 @@ export default function App() {
       currentRoute={activeRoute}
       title={routeMeta.title}
       description={routeMeta.description}
-      user={user ?? currentUser}
+      user={user!}
       theme={theme}
       onNavigate={navigate}
       onToggleTheme={toggleTheme}
@@ -377,34 +488,46 @@ export default function App() {
     >
       {activeRoute === '/dashboard' ? (
         <DashboardPage
-          user={user ?? currentUser}
-          documents={knowledgeDocuments}
+          user={user!}
+          documents={allDocuments}
           history={history}
-          messages={messages}
+          stats={stats}
           onNavigate={navigate}
         />
       ) : null}
 
       {activeRoute === '/chat' ? (
-        <ChatPage
-          documents={knowledgeDocuments}
-          messages={messages}
-          isLoading={isLoading}
-          selectedDocument={selectedDocument}
-          highlightedSnippet={highlightedSnippet}
-          onAsk={handleAsk}
-          onOpenSource={handleOpenSource}
-          onSelectDocument={(document) => {
-            setSelectedDocument(document);
-            setHighlightedSnippet(undefined);
-          }}
-        />
+        <div className="flex h-full min-h-0">
+          <ChatList
+            chats={chats}
+            activeChatId={activeChatId}
+            onCreate={handleCreateChat}
+            onSelect={handleSelectChat}
+            onDelete={handleDeleteChat}
+            isCreating={isCreatingChat}
+          />
+          <div className="min-w-0 flex-1">
+            <ChatPage
+              documents={allDocuments}
+              messages={messages}
+              isLoading={isLoading}
+              selectedDocument={selectedDocument}
+              highlightedSnippet={highlightedSnippet}
+              onAsk={handleAsk}
+              onOpenSource={handleOpenSource}
+              onSelectDocument={(document) => {
+                setSelectedDocument(document);
+                setHighlightedSnippet(undefined);
+              }}
+            />
+          </div>
+        </div>
       ) : null}
 
       {activeRoute === '/documents' ? (
         <DocumentsPage
-          documents={knowledgeDocuments}
-          user={user ?? currentUser}
+          documents={allDocuments}
+          user={user!}
           onUpload={handleUpload}
           onDelete={handleDeleteDocument}
         />
@@ -412,7 +535,7 @@ export default function App() {
 
       {activeRoute === '/settings' ? (
         <SettingsPage
-          user={user ?? currentUser}
+          user={user!}
           theme={theme}
           notifications={notifications}
           onUpdateUser={setUser}
@@ -424,7 +547,7 @@ export default function App() {
       <div className="xl:hidden">
         {activeRoute === '/chat' && selectedDocument ? (
           <DocumentSidebar
-            documents={knowledgeDocuments}
+            documents={allDocuments}
             selectedDocumentId={selectedDocument.id}
             highlightedSnippet={highlightedSnippet}
             onSelectDocument={(document) => setSelectedDocument(document)}

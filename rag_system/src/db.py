@@ -20,22 +20,7 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db() -> None:
-    from src.models import User, UserSettings
+    from src.models import Chat, ChatMessage, QueryHistory, User, UserSettings  # noqa: F401
 
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
-
-    async with AsyncSessionLocal() as session:
-        user = await session.get(User, 1)
-        if user is None:
-            user = User(
-                id=1,
-                name="Анна Морозова",
-                email="anna.morozova@company.ru",
-                role="Product Operations Lead",
-                department="Operations",
-            )
-            session.add(user)
-            await session.flush()
-            session.add(UserSettings(user_id=user.id))
-            await session.commit()

@@ -89,3 +89,24 @@ export type AppRoute =
   | '/chat'
   | '/documents'
   | '/settings';
+
+export interface ChatSummary {
+  id: number;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
+}
+
+export interface StatsResponse {
+  documents: number;
+  queries: number;
+  sourcesTotal: number;
+  chats: number;
+}
+
+export interface UploadResult {
+  message: string;
+  book: string;
+  chunks: number;
+}

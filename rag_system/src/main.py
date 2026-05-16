@@ -11,6 +11,8 @@ from src.routes.queries import router as queries_router
 from src.routes.data_loading import router as data_loading_router
 from src.routes.documents import router as documents_router
 from src.routes.profile import router as profile_router
+from src.routes.auth import router as auth_router
+from src.routes.chats import router as chats_router
 from src.services.query_service import QueryService
 from src.services.data_loading_service import DataLoadingService
 from src.services.embeding_service import EmbeddingService
@@ -86,7 +88,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(auth_router)
 app.include_router(queries_router)
 app.include_router(data_loading_router)
 app.include_router(documents_router)
 app.include_router(profile_router)
+app.include_router(chats_router)

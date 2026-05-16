@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 
 from src.schemas import BlockType
 
@@ -29,6 +29,8 @@ class QueryResponse(BaseModel):
 
 class IngestResponse(BaseModel):
     message: str
+    book: str
+    chunks: int
 
 
 class UserSettingsResponse(BaseModel):
@@ -80,3 +82,72 @@ class DocumentItemResponse(BaseModel):
     pages: Optional[int] = None
     owner: str = ""
     summary: str = ""
+
+
+class RegisterRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=160)
+    email: EmailStr
+    password: str = Field(..., min_length=6, max_length=128)
+    role: Optional[str] = Field(default=None, max_length=160)
+    department: Optional[str] = Field(default=None, max_length=160)
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=1, max_length=128)
+
+
+class AuthResponse(BaseModel):
+    token: str
+    profile: UserProfileResponse
+
+
+class StatsResponse(BaseModel):
+    documents: int
+    queries: int
+    sources_total: int
+    chats: int
+
+
+class ChatSummaryResponse(BaseModel):
+    id: int
+    title: str
+    created_at: str
+    updated_at: str
+    message_count: int
+
+
+class ChatCreateRequest(BaseModel):
+    title: Optional[str] = Field(default=None, max_length=255)
+
+
+class ChatMessageSource(BaseModel):
+    fileName: str = ""
+    text: str
+    score: float
+    page: Optional[int] = None
+    book: str = ""
+    author: Optional[str] = None
+    part: str = ""
+    chapter: str = ""
+    section: str = ""
+    block_type: Optional[str] = None
+
+
+class ChatMessageResponse(BaseModel):
+    id: int
+    role: str
+    content: str
+    created_at: str
+    sources: list[ChatMessageSource] = []
+
+
+class ChatMessagesResponse(BaseModel):
+    chat: ChatSummaryResponse
+    messages: list[ChatMessageResponse]
+
+
+class ChatAskResponse(BaseModel):
+    chat: ChatSummaryResponse
+    user_message: ChatMessageResponse
+    assistant_message: ChatMessageResponse

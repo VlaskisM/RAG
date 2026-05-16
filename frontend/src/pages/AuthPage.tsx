@@ -1,6 +1,7 @@
 import { FormEvent, useState } from 'react';
 import { ArrowRight, ShieldCheck } from 'lucide-react';
 import type { AppRoute, UserProfile } from '../types';
+import { ApiError, login, register } from '../lib/api';
 
 interface AuthPageProps {
   mode: 'login' | 'register';
@@ -9,27 +10,40 @@ interface AuthPageProps {
 }
 
 export function AuthPage({ mode, onSubmit, onNavigate }: AuthPageProps) {
-  const [name, setName] = useState('Анна Морозова');
-  const [email, setEmail] = useState('anna.morozova@company.ru');
-  const [password, setPassword] = useState('password');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isRegister = mode === 'register';
 
-  const handleSubmit = (event: FormEvent) => {
+  const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-
-    onSubmit({
-      name: isRegister ? name : email.split('@')[0].replace('.', ' '),
-      email,
-      role: 'Knowledge Worker',
-      department: 'Operations',
-      settings: {
-        theme: 'system',
-        language: 'ru',
-        showRelevance: true,
-        saveHistory: true,
-      },
-    });
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      const user = isRegister
+        ? await register(name.trim(), email.trim(), password)
+        : await login(email.trim(), password);
+      onSubmit(user);
+    } catch (caught) {
+      if (caught instanceof ApiError) {
+        if (caught.status === 401) {
+          setError('Неверный email или пароль');
+        } else if (caught.status === 409) {
+          setError('Этот email уже зарегистрирован');
+        } else if (caught.status === 422) {
+          setError('Проверьте корректность данных формы');
+        } else {
+          setError(caught.message || 'Не удалось выполнить запрос');
+        }
+      } else {
+        setError('Сервер недоступен. Проверьте подключение к API.');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -65,7 +79,9 @@ export function AuthPage({ mode, onSubmit, onNavigate }: AuthPageProps) {
               {isRegister ? 'Создать аккаунт' : 'Войти в аккаунт'}
             </p>
             <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-              Mock authentication сохраняет пользователя в localStorage.
+              {isRegister
+                ? 'Создайте учётную запись для доступа к базе знаний.'
+                : 'Введите данные учётной записи для входа.'}
             </p>
           </div>
 
@@ -79,6 +95,7 @@ export function AuthPage({ mode, onSubmit, onNavigate }: AuthPageProps) {
                 onChange={(event) => setName(event.target.value)}
                 className="mt-2 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-brand-500 dark:border-slate-800 dark:bg-slate-950"
                 required
+                minLength={1}
               />
             </label>
           ) : null}
@@ -106,14 +123,22 @@ export function AuthPage({ mode, onSubmit, onNavigate }: AuthPageProps) {
               onChange={(event) => setPassword(event.target.value)}
               className="mt-2 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-brand-500 dark:border-slate-800 dark:bg-slate-950"
               required
+              minLength={6}
             />
           </label>
 
+          {error ? (
+            <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
+              {error}
+            </p>
+          ) : null}
+
           <button
             type="submit"
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-brand-600 text-sm font-semibold text-white transition hover:bg-brand-700"
+            disabled={isSubmitting}
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-brand-600 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isRegister ? 'Зарегистрироваться' : 'Войти'}
+            {isSubmitting ? 'Подождите…' : isRegister ? 'Зарегистрироваться' : 'Войти'}
             <ArrowRight size={17} />
           </button>
 
