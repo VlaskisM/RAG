@@ -29,11 +29,25 @@ export function fileTypeLabel(type: FileType) {
     pdf: 'PDF',
     docx: 'DOCX',
     xlsx: 'XLSX',
+    txt: 'TXT',
+    csv: 'CSV',
     md: 'MD',
     html: 'HTML',
   };
 
   return labels[type] ?? type.toUpperCase();
+}
+
+export function formatBytes(value?: number) {
+  if (!value) {
+    return 'n/a';
+  }
+
+  if (value < 1024 * 1024) {
+    return `${Math.round(value / 1024)} KB`;
+  }
+
+  return `${(value / 1024 / 1024).toFixed(1)} MB`;
 }
 
 export function relevanceLabel(value?: number) {

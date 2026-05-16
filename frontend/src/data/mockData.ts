@@ -24,6 +24,9 @@ export const documents: KnowledgeDocument[] = [
     pages: 18,
     owner: 'HR Team',
     summary: 'Правила отпусков, компенсаций, удаленной работы и внутренней мобильности.',
+    status: 'indexed',
+    size: 1840000,
+    chunks: 126,
   },
   {
     id: 'doc-fin-02',
@@ -34,6 +37,9 @@ export const documents: KnowledgeDocument[] = [
     uploadedAt: '2026-03-12T12:30:00.000Z',
     owner: 'Finance Operations',
     summary: 'Лимиты командировочных расходов по регионам, ролям и типам поездок.',
+    status: 'indexed',
+    size: 940000,
+    chunks: 48,
   },
   {
     id: 'doc-eng-03',
@@ -44,6 +50,9 @@ export const documents: KnowledgeDocument[] = [
     uploadedAt: '2026-05-03T14:10:00.000Z',
     owner: 'Platform Engineering',
     summary: 'Процесс классификации инцидентов, роли дежурных инженеров и шаблоны коммуникации.',
+    status: 'indexed',
+    size: 380000,
+    chunks: 34,
   },
   {
     id: 'doc-legal-04',
@@ -55,6 +64,9 @@ export const documents: KnowledgeDocument[] = [
     pages: 9,
     owner: 'Legal',
     summary: 'Рекомендации по подписанию NDA с подрядчиками, клиентами и партнерами.',
+    status: 'indexed',
+    size: 720000,
+    chunks: 52,
   },
   {
     id: 'doc-sales-05',
@@ -65,6 +77,9 @@ export const documents: KnowledgeDocument[] = [
     uploadedAt: '2026-02-18T11:20:00.000Z',
     owner: 'Revenue Enablement',
     summary: 'Пакеты, скидки, правила согласования нестандартных коммерческих условий.',
+    status: 'indexed',
+    size: 210000,
+    chunks: 28,
   },
   {
     id: 'doc-ops-06',
@@ -76,6 +91,9 @@ export const documents: KnowledgeDocument[] = [
     pages: 12,
     owner: 'People Operations',
     summary: 'Пошаговый процесс подключения нового сотрудника к системам и внутренним сервисам.',
+    status: 'indexed',
+    size: 1240000,
+    chunks: 88,
   },
 ];
 

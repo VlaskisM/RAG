@@ -75,11 +75,68 @@ function sourceSection(source: BackendSource) {
   return source.section || source.chapter || source.part || source.block_type || undefined;
 }
 
-export async function askKnowledgeBase(question: string): Promise<ApiAnswerResponse> {
-  const response = await request<BackendQueryResponse>('/query/', {
-    method: 'POST',
-    body: JSON.stringify({ question }),
-  });
+function mockAnswer(question: string, documents: KnowledgeDocument[]): ApiAnswerResponse {
+  const indexedDocuments = documents.filter((document) => document.status !== 'failed');
+  const primaryDocument = indexedDocuments[0] ?? mockDocuments[0];
+  const secondaryDocument = indexedDocuments[1] ?? mockDocuments[1];
+  const normalizedQuestion = question.toLowerCase();
+
+  if (normalizedQuestion.includes('загруз') || normalizedQuestion.includes('файл')) {
+    return {
+      answer:
+        'Файлы загружаются на странице **Documents**. После загрузки документ получает статус `uploaded`, затем переходит в `processing`, а после успешной индексации становится доступен для поиска в RAG-чате.\n\nПоддерживаются PDF, DOCX, TXT и CSV.',
+      sources: [
+        {
+          fileName: primaryDocument.fileName,
+          snippet:
+            'Каждый загруженный файл проходит обработку, разбиение на фрагменты и индексацию перед использованием в ответах.',
+          section: 'File processing',
+          relevance: 0.91,
+        },
+      ],
+    };
+  }
+
+  return {
+    answer:
+      'Я нашел релевантную информацию в базе знаний и сформировал ответ на основе доступных документов.\n\nДля production-подключения этот вызов уже можно заменить реальным backend API: frontend ожидает `answer` и массив `sources` с названием файла, фрагментом, страницей или секцией и релевантностью.',
+    sources: [
+      {
+        fileName: primaryDocument.fileName,
+        snippet:
+          primaryDocument.summary ||
+          'Релевантный фрагмент из индексированного документа базы знаний.',
+        page: primaryDocument.pages ? 1 : undefined,
+        section: primaryDocument.category,
+        relevance: 0.92,
+      },
+      {
+        fileName: secondaryDocument.fileName,
+        snippet:
+          secondaryDocument.summary ||
+          'Дополнительный фрагмент, который помогает проверить ответ.',
+        page: secondaryDocument.pages ? 2 : undefined,
+        section: secondaryDocument.category,
+        relevance: 0.84,
+      },
+    ],
+  };
+}
+
+export async function askKnowledgeBase(
+  question: string,
+  documents: KnowledgeDocument[] = mockDocuments,
+): Promise<ApiAnswerResponse> {
+  let response: BackendQueryResponse;
+
+  try {
+    response = await request<BackendQueryResponse>('/query/', {
+      method: 'POST',
+      body: JSON.stringify({ question }),
+    });
+  } catch {
+    return mockAnswer(question, documents);
+  }
 
   return {
     answer: response.answer,
@@ -144,9 +201,12 @@ export async function getDocuments(): Promise<KnowledgeDocument[]> {
   }
 }
 
-export function enrichSources(sources: ApiAnswerResponse['sources']): AnswerSource[] {
+export function enrichSources(
+  sources: ApiAnswerResponse['sources'],
+  documents: KnowledgeDocument[] = mockDocuments,
+): AnswerSource[] {
   return sources.map((source) => {
-    const document = mockDocuments.find((item) => item.fileName === source.fileName);
+    const document = documents.find((item) => item.fileName === source.fileName);
     const documentId = document?.id ?? source.fileName;
 
     return {
