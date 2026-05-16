@@ -16,13 +16,19 @@ class Settings(BaseSettings):
     dense_k: int
     sparse_k: int
     num_candidates: int
-    rrf_k: int
+    hybrid_dense_weight: float
     llm_model: str
-    embedding_model: str
+    embedding_model_doc: str
+    embedding_model_query: str
     embedding_concurrency: int
     enable_reranker: bool
     reranker_model: str
     reranker_batch_size: int
+    database_url: str = "postgresql+asyncpg://rag:rag@localhost:5433/rag_app"
+    cors_origins: list[str] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
 
 
     model_config = SettingsConfigDict(

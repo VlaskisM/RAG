@@ -1,5 +1,5 @@
 import logging
-from typing import Annotated
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Request, HTTPException, UploadFile, File, Form
 
@@ -16,7 +16,7 @@ async def load_data(
     request: Request,
     file: Annotated[UploadFile, File(description="PDF-файл учебника")],
     book: Annotated[str, Form(description="Название книги")],
-    author: Annotated[str | None, Form(description="Автор книги")] = None,
+    author: Annotated[Optional[str], Form(description="Автор книги")] = None,
 ):
     if not (file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Только PDF файлы поддерживаются")

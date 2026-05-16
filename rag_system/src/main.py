@@ -5,8 +5,12 @@ from openai import AsyncOpenAI
 from src.vectorstore import ElasticsearchVectorStore
 from src.config import settings
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from src.db import init_db
 from src.routes.queries import router as queries_router
 from src.routes.data_loading import router as data_loading_router
+from src.routes.documents import router as documents_router
+from src.routes.profile import router as profile_router
 from src.services.query_service import QueryService
 from src.services.data_loading_service import DataLoadingService
 from src.services.embeding_service import EmbeddingService
@@ -27,6 +31,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     
     logger.info("Starting RAG System")
+    await init_db()
 
     client = AsyncOpenAI(
         api_key=settings.openai_api_key,
@@ -74,6 +79,14 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="RAG System", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.include_router(queries_router)
 app.include_router(data_loading_router)
-
+app.include_router(documents_router)
+app.include_router(profile_router)

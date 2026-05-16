@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic import BaseModel, Field
 
 from src.schemas import BlockType
@@ -8,8 +10,12 @@ class QueryRequest(BaseModel):
 
 
 class SourceItem(BaseModel):
+    fileName: str = ""
     text: str
     score: float
+    page: Optional[int] = None
+    book: str = ""
+    author: Optional[str] = None
     part: str = ""
     chapter: str = ""
     section: str = ""
@@ -23,3 +29,54 @@ class QueryResponse(BaseModel):
 
 class IngestResponse(BaseModel):
     message: str
+
+
+class UserSettingsResponse(BaseModel):
+    theme: str
+    language: str
+    show_relevance: bool
+    save_history: bool
+
+
+class UserProfileResponse(BaseModel):
+    id: int
+    name: str
+    email: str
+    role: str
+    department: str
+    avatar_url: Optional[str] = None
+    settings: UserSettingsResponse
+
+
+class UserProfileUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=160)
+    role: Optional[str] = Field(default=None, min_length=1, max_length=160)
+    department: Optional[str] = Field(default=None, min_length=1, max_length=160)
+    avatar_url: Optional[str] = Field(default=None, max_length=512)
+
+
+class UserSettingsUpdate(BaseModel):
+    theme: Optional[str] = Field(default=None, pattern="^(light|dark|system)$")
+    language: Optional[str] = Field(default=None, min_length=2, max_length=16)
+    show_relevance: Optional[bool] = None
+    save_history: Optional[bool] = None
+
+
+class QueryHistoryItemResponse(BaseModel):
+    id: int
+    question: str
+    answer: str
+    source_count: int
+    created_at: str
+
+
+class DocumentItemResponse(BaseModel):
+    id: str
+    fileName: str
+    title: str
+    type: str = "pdf"
+    category: str = "Knowledge"
+    uploadedAt: Optional[str] = None
+    pages: Optional[int] = None
+    owner: str = ""
+    summary: str = ""

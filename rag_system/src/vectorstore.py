@@ -45,8 +45,12 @@ class ElasticsearchVectorStoreInterface(ABC):
         dense_k: int = 40,
         sparse_k: int = 40,
         num_candidates: int = 300,
-        rrf_k: int = 60,
+        dense_weight: float = 0.7,
     ) -> List[RetrievedChunk]:
+        pass
+
+    @abstractmethod
+    async def list_documents(self) -> List[dict]:
         pass
 
 
@@ -114,6 +118,69 @@ class ElasticsearchVectorStore(ElasticsearchVectorStoreInterface):
                 raise RuntimeError(f"Elasticsearch bulk index failed for {len(errors)} document(s): {errors}")
             logger.info("Indexed %s chunks into '%s'", len(actions), self._index_name)
 
+    async def list_documents(self) -> List[dict]:
+        response = await self._es.search(
+            index=self._index_name,
+            size=0,
+            aggs={
+                "documents": {
+                    "terms": {
+                        "field": "book",
+                        "size": 1000,
+                        "order": {"_key": "asc"},
+                    },
+                    "aggs": {
+                        "authors": {"terms": {"field": "author", "size": 1}},
+                        "pages": {"max": {"field": "page"}},
+                        "sample": {
+                            "top_hits": {
+                                "size": 1,
+                                "_source": [
+                                    "book",
+                                    "author",
+                                    "text",
+                                    "page",
+                                    "chapter_title",
+                                    "section_title",
+                                ],
+                            }
+                        },
+                    },
+                }
+            },
+        )
+
+        buckets = response.get("aggregations", {}).get("documents", {}).get("buckets", [])
+        documents: List[dict] = []
+
+        for bucket in buckets:
+            sample_hits = (
+                bucket.get("sample", {})
+                .get("hits", {})
+                .get("hits", [])
+            )
+            sample = sample_hits[0].get("_source", {}) if sample_hits else {}
+            author_buckets = bucket.get("authors", {}).get("buckets", [])
+            author = author_buckets[0].get("key", "") if author_buckets else sample.get("author", "")
+            max_page = bucket.get("pages", {}).get("value")
+
+            documents.append(
+                {
+                    "id": bucket.get("key", ""),
+                    "fileName": bucket.get("key", ""),
+                    "title": bucket.get("key", ""),
+                    "type": "pdf",
+                    "category": sample.get("chapter_title") or "Knowledge",
+                    "uploadedAt": None,
+                    "pages": int(max_page) if max_page is not None else None,
+                    "owner": author or "",
+                    "summary": sample.get("section_title") or sample.get("text", "")[:180],
+                    "chunks": bucket.get("doc_count", 0),
+                }
+            )
+
+        return documents
+
     @staticmethod
     def _to_retrieved_chunk(hit: dict, score: float) -> RetrievedChunk:
         source = hit.get("_source", {})
@@ -172,31 +239,54 @@ class ElasticsearchVectorStore(ElasticsearchVectorStoreInterface):
         )
         return response.get("hits", {}).get("hits", [])
 
-    def _rrf_fuse(
+    @staticmethod
+    def _min_max_normalize(scores: Dict[str, float]) -> Dict[str, float]:
+        if not scores:
+            return {}
+        values = scores.values()
+        lo, hi = min(values), max(values)
+        if hi - lo < 1e-9:
+            return {cid: 1.0 for cid in scores}
+        return {cid: (s - lo) / (hi - lo) for cid, s in scores.items()}
+
+    def _weighted_fuse(
         self,
         dense_hits: List[dict],
         sparse_hits: List[dict],
         k: int,
-        rrf_k: int,
+        dense_weight: float,
     ) -> List[RetrievedChunk]:
-        fused_scores: Dict[str, float] = {}
+        dense_raw: Dict[str, float] = {}
+        for hit in dense_hits:
+            cid = hit.get("_source", {}).get("chunk_id")
+            if cid:
+                dense_raw[cid] = hit.get("_score", 0.0)
+
+        sparse_raw: Dict[str, float] = {}
+        for hit in sparse_hits:
+            cid = hit.get("_source", {}).get("chunk_id")
+            if cid:
+                sparse_raw[cid] = hit.get("_score", 0.0)
+
+        dense_norm = self._min_max_normalize(dense_raw)
+        sparse_norm = self._min_max_normalize(sparse_raw)
+
+        sparse_weight = 1.0 - dense_weight
+        all_ids = set(dense_norm) | set(sparse_norm)
+        fused: Dict[str, float] = {
+            cid: dense_weight * dense_norm.get(cid, 0.0)
+                 + sparse_weight * sparse_norm.get(cid, 0.0)
+            for cid in all_ids
+        }
+
         best_hits: Dict[str, dict] = {}
-
-        def add_scores(hits: List[dict]) -> None:
-            for rank, hit in enumerate(hits, start=1):
-                source = hit.get("_source", {})
-                chunk_id = source.get("chunk_id")
-                if not chunk_id:
-                    continue
-                fused_scores[chunk_id] = fused_scores.get(chunk_id, 0.0) + (1.0 / (rrf_k + rank))
-                if chunk_id not in best_hits:
-                    best_hits[chunk_id] = hit
-
-        add_scores(dense_hits)
-        add_scores(sparse_hits)
+        for hit in (*dense_hits, *sparse_hits):
+            cid = hit.get("_source", {}).get("chunk_id")
+            if cid and cid not in best_hits:
+                best_hits[cid] = hit
 
         ranked: List[Tuple[str, float]] = sorted(
-            fused_scores.items(),
+            fused.items(),
             key=lambda item: item[1],
             reverse=True,
         )[:k]
@@ -214,7 +304,7 @@ class ElasticsearchVectorStore(ElasticsearchVectorStoreInterface):
         dense_k: int = 40,
         sparse_k: int = 40,
         num_candidates: int = 300,
-        rrf_k: int = 60,
+        dense_weight: float = 0.7,
     ) -> List[RetrievedChunk]:
         dense_task = self._search_dense(
             query_vector=query_vector,
@@ -224,9 +314,9 @@ class ElasticsearchVectorStore(ElasticsearchVectorStoreInterface):
         sparse_task = self._search_sparse(query_text=query_text, sparse_k=sparse_k)
         dense_hits, sparse_hits = await asyncio.gather(dense_task, sparse_task)
 
-        return self._rrf_fuse(
+        return self._weighted_fuse(
             dense_hits=dense_hits,
             sparse_hits=sparse_hits,
             k=k,
-            rrf_k=rrf_k,
+            dense_weight=dense_weight,
         )
