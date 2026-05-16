@@ -49,7 +49,7 @@ from pydantic import BaseModel
 - metadata: Метаданные чанк    
 """
 
-
+# Хуй
 class BlockType(str, Enum):
     PART       = "part"
     CHAPTER    = "chapter"
