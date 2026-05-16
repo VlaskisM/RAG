@@ -1,6 +1,6 @@
 from __future__ import annotations
 from enum import Enum
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel
 
 
@@ -66,20 +66,20 @@ class BlockType(str, Enum):
 class Block(BaseModel):
     type: BlockType
     content: str
-    language: str | None = None
-    listing_number: str | None = None
+    language: Optional[str] = None
+    listing_number: Optional[str] = None
 
 
 class ChunkMetadata(BaseModel):
     book: str
-    author: str | None = None
+    author: Optional[str] = None
     part_title: str = ""
     chapter_title: str = ""
     section_title: str = ""
     block_type: BlockType
-    language: str | None = None
-    listing_number: str | None = None
-    page: int | None = None
+    language: Optional[str] = None
+    listing_number: Optional[str] = None
+    page: Optional[int] = None
 
 
 class Chunk(BaseModel):

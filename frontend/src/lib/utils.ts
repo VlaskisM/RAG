@@ -5,7 +5,11 @@ export function cn(...inputs: ClassValue[]) {
   return clsx(inputs);
 }
 
-export function formatDate(value: string) {
+export function formatDate(value?: string | null) {
+  if (!value) {
+    return 'дата неизвестна';
+  }
+
   return new Intl.DateTimeFormat('ru-RU', {
     day: '2-digit',
     month: 'short',
@@ -21,7 +25,7 @@ export function formatTime(value: string) {
 }
 
 export function fileTypeLabel(type: FileType) {
-  const labels: Record<FileType, string> = {
+  const labels: Record<string, string> = {
     pdf: 'PDF',
     docx: 'DOCX',
     xlsx: 'XLSX',
@@ -29,7 +33,7 @@ export function fileTypeLabel(type: FileType) {
     html: 'HTML',
   };
 
-  return labels[type];
+  return labels[type] ?? type.toUpperCase();
 }
 
 export function relevanceLabel(value?: number) {

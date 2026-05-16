@@ -1,14 +1,8 @@
 export type Role = 'user' | 'assistant';
 
-export type FileType = 'pdf' | 'docx' | 'xlsx' | 'md' | 'html';
+export type FileType = 'pdf' | 'docx' | 'xlsx' | 'md' | 'html' | string;
 
-export type DocumentCategory =
-  | 'HR'
-  | 'Finance'
-  | 'Legal'
-  | 'Engineering'
-  | 'Sales'
-  | 'Operations';
+export type DocumentCategory = string;
 
 export interface KnowledgeDocument {
   id: string;
@@ -16,7 +10,7 @@ export interface KnowledgeDocument {
   title: string;
   type: FileType;
   category: DocumentCategory;
-  uploadedAt: string;
+  uploadedAt?: string | null;
   pages?: number;
   owner: string;
   summary: string;
@@ -55,14 +49,24 @@ export interface ApiAnswerResponse {
 export interface QueryHistoryItem {
   id: string;
   question: string;
+  answer?: string;
   createdAt: string;
   sourceCount: number;
 }
 
+export interface UserSettings {
+  theme: 'light' | 'dark' | 'system';
+  language: string;
+  showRelevance: boolean;
+  saveHistory: boolean;
+}
+
 export interface UserProfile {
+  id?: number;
   name: string;
   email: string;
   role: string;
   department: string;
   avatarUrl?: string;
+  settings?: UserSettings;
 }

@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     enable_reranker: bool
     reranker_model: str
     reranker_batch_size: int
+    database_url: str = "postgresql+asyncpg://rag:rag@localhost:5433/rag_app"
+    cors_origins: list[str] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
 
 
     model_config = SettingsConfigDict(

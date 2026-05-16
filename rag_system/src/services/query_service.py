@@ -1,7 +1,7 @@
 import logging
 import time
 import uuid
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from src.config import settings
 from src.schemas import BlockType, Chunk, ChunkMetadata, RetrievedChunk
@@ -20,7 +20,7 @@ class QueryService:
         store,
         embedding_service: EmbeddingServiceInterface,
         llm_service: LLMServiceInterface,
-        reranker_service: RerankerServiceInterface | None = None,
+        reranker_service: Optional[RerankerServiceInterface] = None,
     ):
         self._store = store
         self._embedding_service = embedding_service

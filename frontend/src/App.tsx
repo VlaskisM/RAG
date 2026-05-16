@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AccountPanel } from './components/AccountPanel';
 import { ChatPanel } from './components/ChatPanel';
 import { DocumentSidebar } from './components/DocumentSidebar';
@@ -10,12 +10,28 @@ import {
   queryHistory,
 } from './data/mockData';
 import { useTheme } from './hooks/useTheme';
-import { askKnowledgeBase, enrichSources } from './lib/api';
+import {
+  askKnowledgeBase,
+  enrichSources,
+  getDocuments,
+  getProfile,
+  getQueryHistory,
+} from './lib/api';
 import { createId } from './lib/utils';
-import type { AnswerSource, ChatMessage, KnowledgeDocument } from './types';
+import type {
+  AnswerSource,
+  ChatMessage,
+  KnowledgeDocument,
+  QueryHistoryItem,
+  UserProfile,
+} from './types';
 
 export default function App() {
   const { theme, toggleTheme } = useTheme();
+  const [user, setUser] = useState<UserProfile>(currentUser);
+  const [knowledgeDocuments, setKnowledgeDocuments] =
+    useState<KnowledgeDocument[]>(documents);
+  const [history, setHistory] = useState<QueryHistoryItem[]>(queryHistory);
   const [messages, setMessages] = useState<ChatMessage[]>(chatMessages);
   const [isLoading, setIsLoading] = useState(false);
   const [isDocumentPanelOpen, setIsDocumentPanelOpen] = useState(false);
@@ -24,8 +40,21 @@ export default function App() {
   );
   const [highlightedSnippet, setHighlightedSnippet] = useState<string | undefined>();
 
+  useEffect(() => {
+    void Promise.all([getProfile(), getDocuments(), getQueryHistory()]).then(
+      ([profile, loadedDocuments, loadedHistory]) => {
+        setUser(profile);
+        setKnowledgeDocuments(loadedDocuments);
+        setHistory(loadedHistory);
+        setSelectedDocument(loadedDocuments[0]);
+      },
+    );
+  }, []);
+
   const handleOpenSource = (source: AnswerSource) => {
-    const document = documents.find((item) => item.id === source.documentId);
+    const document = knowledgeDocuments.find(
+      (item) => item.id === source.documentId || item.fileName === source.fileName,
+    );
     setSelectedDocument(document);
     setHighlightedSnippet(source.snippet);
     setIsDocumentPanelOpen(true);
@@ -104,6 +133,8 @@ export default function App() {
       if (sources[0]) {
         handleOpenSource(sources[0]);
       }
+
+      setHistory(await getQueryHistory());
     } catch {
       setMessages((currentMessages) =>
         currentMessages.map((message) =>
@@ -125,13 +156,13 @@ export default function App() {
   return (
     <div className="h-screen overflow-hidden bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-white">
       <div className="flex h-full">
-        <AccountPanel user={currentUser} history={queryHistory} />
+        <AccountPanel user={user} history={history} />
         <div className="flex min-w-0 flex-1 flex-col">
           <Header
             theme={theme}
             onToggleTheme={toggleTheme}
             onOpenDocuments={() => setIsDocumentPanelOpen(true)}
-            user={currentUser}
+            user={user}
           />
           <div className="flex min-h-0 flex-1 flex-col xl:flex-row">
             <ChatPanel
@@ -142,7 +173,7 @@ export default function App() {
             />
             <div className="hidden min-h-0 xl:block">
               <DocumentSidebar
-                documents={documents}
+                documents={knowledgeDocuments}
                 selectedDocumentId={selectedDocument?.id}
                 highlightedSnippet={highlightedSnippet}
                 onSelectDocument={(document) => {
@@ -159,7 +190,7 @@ export default function App() {
         <div className="fixed inset-0 z-40 bg-slate-950/45 backdrop-blur-sm xl:hidden">
           <div className="absolute inset-y-0 right-0 w-full max-w-[420px] shadow-soft-dark">
             <DocumentSidebar
-              documents={documents}
+              documents={knowledgeDocuments}
               selectedDocumentId={selectedDocument?.id}
               highlightedSnippet={highlightedSnippet}
               onClose={() => setIsDocumentPanelOpen(false)}

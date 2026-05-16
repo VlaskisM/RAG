@@ -1,6 +1,6 @@
 import { FileSpreadsheet, FileText, Files, Search, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import type { DocumentCategory, FileType, KnowledgeDocument } from '../types';
+import type { KnowledgeDocument } from '../types';
 import { cn, fileTypeLabel, formatDate } from '../lib/utils';
 
 interface DocumentSidebarProps {
@@ -10,18 +10,6 @@ interface DocumentSidebarProps {
   onSelectDocument: (document: KnowledgeDocument) => void;
   onClose?: () => void;
 }
-
-const categoryOptions: Array<DocumentCategory | 'All'> = [
-  'All',
-  'HR',
-  'Finance',
-  'Legal',
-  'Engineering',
-  'Sales',
-  'Operations',
-];
-
-const fileTypeOptions: Array<FileType | 'All'> = ['All', 'pdf', 'docx', 'xlsx', 'md', 'html'];
 
 const fileIcon = {
   pdf: FileText,
@@ -39,8 +27,17 @@ export function DocumentSidebar({
   onClose,
 }: DocumentSidebarProps) {
   const [search, setSearch] = useState('');
-  const [category, setCategory] = useState<DocumentCategory | 'All'>('All');
-  const [type, setType] = useState<FileType | 'All'>('All');
+  const [category, setCategory] = useState('All');
+  const [type, setType] = useState('All');
+
+  const categoryOptions = useMemo(
+    () => ['All', ...Array.from(new Set(documents.map((document) => document.category)))],
+    [documents],
+  );
+  const fileTypeOptions = useMemo(
+    () => ['All', ...Array.from(new Set(documents.map((document) => document.type)))],
+    [documents],
+  );
 
   const filteredDocuments = useMemo(() => {
     const normalizedSearch = search.toLowerCase().trim();
@@ -99,7 +96,7 @@ export function DocumentSidebar({
         <div className="mt-3 grid grid-cols-2 gap-2">
           <select
             value={category}
-            onChange={(event) => setCategory(event.target.value as DocumentCategory | 'All')}
+            onChange={(event) => setCategory(event.target.value)}
             className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-sm text-slate-700 outline-none focus:border-brand-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
           >
             {categoryOptions.map((option) => (
@@ -110,7 +107,7 @@ export function DocumentSidebar({
           </select>
           <select
             value={type}
-            onChange={(event) => setType(event.target.value as FileType | 'All')}
+            onChange={(event) => setType(event.target.value)}
             className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-sm text-slate-700 outline-none focus:border-brand-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
           >
             {fileTypeOptions.map((option) => (
@@ -124,7 +121,7 @@ export function DocumentSidebar({
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {filteredDocuments.map((document) => {
-          const Icon = fileIcon[document.type];
+          const Icon = fileIcon[document.type as keyof typeof fileIcon] ?? Files;
           const isSelected = document.id === selectedDocumentId;
 
           return (

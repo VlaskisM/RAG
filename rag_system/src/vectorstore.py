@@ -49,6 +49,10 @@ class ElasticsearchVectorStoreInterface(ABC):
     ) -> List[RetrievedChunk]:
         pass
 
+    @abstractmethod
+    async def list_documents(self) -> List[dict]:
+        pass
+
 
 class ElasticsearchVectorStore(ElasticsearchVectorStoreInterface):
     def __init__(self, es_url: str, index_name: str, embedding_dim: int):
@@ -113,6 +117,69 @@ class ElasticsearchVectorStore(ElasticsearchVectorStoreInterface):
             if errors:
                 raise RuntimeError(f"Elasticsearch bulk index failed for {len(errors)} document(s): {errors}")
             logger.info("Indexed %s chunks into '%s'", len(actions), self._index_name)
+
+    async def list_documents(self) -> List[dict]:
+        response = await self._es.search(
+            index=self._index_name,
+            size=0,
+            aggs={
+                "documents": {
+                    "terms": {
+                        "field": "book",
+                        "size": 1000,
+                        "order": {"_key": "asc"},
+                    },
+                    "aggs": {
+                        "authors": {"terms": {"field": "author", "size": 1}},
+                        "pages": {"max": {"field": "page"}},
+                        "sample": {
+                            "top_hits": {
+                                "size": 1,
+                                "_source": [
+                                    "book",
+                                    "author",
+                                    "text",
+                                    "page",
+                                    "chapter_title",
+                                    "section_title",
+                                ],
+                            }
+                        },
+                    },
+                }
+            },
+        )
+
+        buckets = response.get("aggregations", {}).get("documents", {}).get("buckets", [])
+        documents: List[dict] = []
+
+        for bucket in buckets:
+            sample_hits = (
+                bucket.get("sample", {})
+                .get("hits", {})
+                .get("hits", [])
+            )
+            sample = sample_hits[0].get("_source", {}) if sample_hits else {}
+            author_buckets = bucket.get("authors", {}).get("buckets", [])
+            author = author_buckets[0].get("key", "") if author_buckets else sample.get("author", "")
+            max_page = bucket.get("pages", {}).get("value")
+
+            documents.append(
+                {
+                    "id": bucket.get("key", ""),
+                    "fileName": bucket.get("key", ""),
+                    "title": bucket.get("key", ""),
+                    "type": "pdf",
+                    "category": sample.get("chapter_title") or "Knowledge",
+                    "uploadedAt": None,
+                    "pages": int(max_page) if max_page is not None else None,
+                    "owner": author or "",
+                    "summary": sample.get("section_title") or sample.get("text", "")[:180],
+                    "chunks": bucket.get("doc_count", 0),
+                }
+            )
+
+        return documents
 
     @staticmethod
     def _to_retrieved_chunk(hit: dict, score: float) -> RetrievedChunk:

@@ -1,6 +1,7 @@
 import logging
 import time
 from abc import ABC, abstractmethod
+from typing import Optional
 
 from fastapi import UploadFile
 
@@ -15,7 +16,7 @@ logger = logging.getLogger(__name__)
 class DataLoadingServiceInterface(ABC):
 
     @abstractmethod
-    async def ingest(self, file: UploadFile, book: str, author: str | None = None) -> None:
+    async def ingest(self, file: UploadFile, book: str, author: Optional[str] = None) -> None:
         pass
 
 
@@ -32,7 +33,11 @@ class DataLoadingService(DataLoadingServiceInterface):
         self._chunker_service = chunker_service
         self._document_conversion_service = document_conversion_service
 
-    async def ingest(self, file: UploadFile, book: str, author: str | None = None) -> None:
+    @property
+    def store(self):
+        return self._store
+
+    async def ingest(self, file: UploadFile, book: str, author: Optional[str] = None) -> None:
 
         start = time.perf_counter()
         logger.info(
