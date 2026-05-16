@@ -93,24 +93,19 @@ Mock-данные лежат в `src/data/mockData.ts`:
 
 ## Подключение к реальному API
 
-Замените `askKnowledgeBase` в `src/lib/api.ts` на `fetch` к backend:
+Frontend уже подключен к FastAPI backend через `src/lib/api.ts`.
 
-```ts
-export async function askKnowledgeBase(question: string): Promise<ApiAnswerResponse> {
-  const response = await fetch(`${import.meta.env.VITE_API_URL}/queries/ask`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ question }),
-  });
+Используемые эндпоинты:
 
-  if (!response.ok) {
-    throw new Error('Failed to ask knowledge base');
-  }
+- `POST /query/` - вопрос к RAG-системе.
+- `GET /documents/` - список документов из Elasticsearch.
+- `GET /profile/me` - профиль пользователя из PostgreSQL.
+- `GET /profile/history` - история запросов из PostgreSQL.
 
-  return response.json();
-}
+По умолчанию frontend ходит на `http://localhost:8000`. Для другого адреса укажите:
+
+```bash
+VITE_API_URL=http://localhost:8000
 ```
 
 Для настоящего streaming можно заменить mock-loading на `ReadableStream`/SSE:
@@ -120,6 +115,23 @@ export async function askKnowledgeBase(question: string): Promise<ApiAnswerRespo
 - источники лучше присылать финальным событием `sources`, когда генерация завершена.
 
 ## Запуск
+
+Инфраструктура backend:
+
+```bash
+cd ../rag_system
+docker compose up -d
+```
+
+Backend:
+
+```bash
+cd ..
+pip install -r requirements.txt
+python rag_system/src/run.py
+```
+
+Frontend:
 
 ```bash
 npm install
