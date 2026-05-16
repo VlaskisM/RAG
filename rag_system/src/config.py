@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     rrf_k: int
     llm_model: str
     embedding_model: str
-    batch_size: int
+    embedding_concurrency: int
     enable_reranker: bool
     reranker_model: str
     reranker_batch_size: int
