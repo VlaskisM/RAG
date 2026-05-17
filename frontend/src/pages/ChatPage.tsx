@@ -1,5 +1,5 @@
 import { Files, PanelRightOpen } from 'lucide-react';
-import type { AnswerSource, ChatMessage, KnowledgeDocument } from '../types';
+import type { AnswerSource, AttachedCode, ChatMessage, KnowledgeDocument } from '../types';
 import { ChatPanel } from '../components/ChatPanel';
 import { DocumentSidebar } from '../components/DocumentSidebar';
 
@@ -9,7 +9,7 @@ interface ChatPageProps {
   isLoading: boolean;
   selectedDocument?: KnowledgeDocument;
   isDocumentListCollapsed: boolean;
-  onAsk: (question: string, codeReviewMode: boolean) => void;
+  onAsk: (question: string, codeReviewMode: boolean, attachedCode?: AttachedCode) => void;
   onOpenSource: (source: AnswerSource) => void;
   onSelectDocument: (document: KnowledgeDocument) => void;
   onToggleDocumentList: () => void;

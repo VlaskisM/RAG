@@ -38,6 +38,7 @@ export interface ChatMessage {
   createdAt: string;
   sources?: AnswerSource[];
   isStreaming?: boolean;
+  streamingLabel?: string;
 }
 
 export interface ApiAnswerResponse {
@@ -109,4 +110,13 @@ export interface UploadResult {
   message: string;
   book: string;
   chunks: number;
+}
+
+export interface AttachedCode {
+  filename: string;
+  content: string;
+}
+
+export interface CodeReviewResponse {
+  review: string;
 }

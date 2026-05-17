@@ -41,7 +41,7 @@ export function ChatMessage({ message, onOpenSource }: ChatMessageProps) {
               <span className="h-2 w-2 animate-pulse rounded-full bg-brand-500 [animation-delay:120ms]" />
               <span className="h-2 w-2 animate-pulse rounded-full bg-brand-500 [animation-delay:240ms]" />
               <span className="ml-2 text-sm text-slate-500 dark:text-slate-400">
-                Ищу по базе знаний...
+                {message.streamingLabel ?? 'Ищу по базе знаний...'}
               </span>
             </div>
           ) : isUser ? (

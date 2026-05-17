@@ -7,6 +7,7 @@ import { useTheme } from './hooks/useTheme';
 import {
   ApiError,
   askInChat,
+  codeReview as apiCodeReview,
   createChat as apiCreateChat,
   deleteChat as apiDeleteChat,
   fetchMe,
@@ -26,6 +27,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import type {
   AnswerSource,
   AppRoute,
+  AttachedCode,
   ChatMessage,
   ChatSummary,
   DocumentStatus,
@@ -419,22 +421,22 @@ export default function App() {
     }
   };
 
-  const handleAsk = async (question: string, codeReviewMode = false) => {
+  const handleAsk = async (question: string, codeReviewMode = false, attachedCode?: AttachedCode) => {
     if (isLoading) {
-      return;
-    }
-    const chatId = await ensureActiveChat();
-    if (chatId == null) {
       return;
     }
 
     const placeholderId = `pending-${Date.now()}`;
+    const userContent = attachedCode
+      ? (question ? `Code Review: ${attachedCode.filename}\n\n${question}` : `Code Review: ${attachedCode.filename}`)
+      : question;
+
     setMessages((current) => [
       ...current,
       {
         id: `local-user-${Date.now()}`,
         role: 'user',
-        content: question,
+        content: userContent,
         createdAt: new Date().toISOString(),
       },
       {
@@ -443,25 +445,33 @@ export default function App() {
         content: '',
         createdAt: new Date().toISOString(),
         isStreaming: true,
+        streamingLabel: codeReviewMode && attachedCode ? 'Анализирую код, ищу ошибки...' : undefined,
       },
     ]);
     setIsLoading(true);
 
     try {
-      const backendQuestion = codeReviewMode
-        ? [
-            'Режим Code Review включен.',
-            'Проанализируй вопрос как senior reviewer: сначала укажи проблемы, риски, регрессии и недостающие проверки, затем коротко предложи исправления.',
-            '',
-            question,
-          ].join('\n')
-        : question;
-      const response = await askInChat(chatId, backendQuestion);
+      if (codeReviewMode && attachedCode) {
+        const { review } = await apiCodeReview(attachedCode.content, attachedCode.filename, question);
+        setMessages((current) =>
+          current.map((msg) =>
+            msg.id === placeholderId ? { ...msg, content: review, isStreaming: false } : msg,
+          ),
+        );
+        return;
+      }
+
+      const chatId = await ensureActiveChat();
+      if (chatId == null) {
+        return;
+      }
+
+      const response = await askInChat(chatId, question);
       setMessages((current) => {
         const filtered = current.filter(
           (msg) =>
             msg.id !== placeholderId &&
-            !(msg.role === 'user' && msg.content === question && msg.id.startsWith('local-user-')),
+            !(msg.role === 'user' && msg.content === userContent && msg.id.startsWith('local-user-')),
         );
         return [
           ...filtered,

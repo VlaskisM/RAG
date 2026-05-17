@@ -3,6 +3,7 @@ import type {
   ApiAnswerResponse,
   ChatMessage,
   ChatSummary,
+  CodeReviewResponse,
   KnowledgeDocument,
   QueryHistoryItem,
   StatsResponse,
@@ -335,6 +336,17 @@ export async function askInChat(
     userMessage: mapChatMessage(response.user_message),
     assistantMessage: mapChatMessage(response.assistant_message),
   };
+}
+
+export async function codeReview(
+  code: string,
+  filename?: string,
+  question?: string,
+): Promise<CodeReviewResponse> {
+  return request<CodeReviewResponse>('/code-review/', {
+    method: 'POST',
+    body: JSON.stringify({ code, filename: filename ?? '', question: question ?? '' }),
+  });
 }
 
 export function enrichSources(

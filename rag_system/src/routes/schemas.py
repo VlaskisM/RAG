@@ -151,3 +151,13 @@ class ChatAskResponse(BaseModel):
     chat: ChatSummaryResponse
     user_message: ChatMessageResponse
     assistant_message: ChatMessageResponse
+
+
+class CodeReviewRequest(BaseModel):
+    code: str = Field(..., min_length=1, description="Исходный код для ревью")
+    filename: str = Field(default="", description="Имя файла")
+    question: str = Field(default="", description="Дополнительный вопрос от разработчика")
+
+
+class CodeReviewResponse(BaseModel):
+    review: str

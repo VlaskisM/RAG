@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react';
-import type { AnswerSource, ChatMessage } from '../types';
+import type { AnswerSource, AttachedCode, ChatMessage } from '../types';
 import { ChatComposer } from './ChatComposer';
 import { ChatMessage as ChatMessageView } from './ChatMessage';
 
 interface ChatPanelProps {
   messages: ChatMessage[];
   isLoading: boolean;
-  onAsk: (question: string, codeReviewMode: boolean) => void;
+  onAsk: (question: string, codeReviewMode: boolean, attachedCode?: AttachedCode) => void;
   onOpenSource: (source: AnswerSource) => void;
 }
 

@@ -1,0 +1,9 @@
+.git/
+.venv/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+frontend/node_modules/
+frontend/dist/
+rag_system/.env
+exports/

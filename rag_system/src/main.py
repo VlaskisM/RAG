@@ -13,6 +13,7 @@ from src.routes.documents import router as documents_router
 from src.routes.profile import router as profile_router
 from src.routes.auth import router as auth_router
 from src.routes.chats import router as chats_router
+from src.routes.code_review import router as code_review_router
 from src.services.query_service import QueryService
 from src.services.data_loading_service import DataLoadingService
 from src.services.embeding_service import EmbeddingService
@@ -20,6 +21,7 @@ from src.services.chunker_service import ChunkerService
 from src.services.document_conversion_service import DocumentConversionService
 from src.services.llm_service import LLMService
 from src.services.reranker_service import RerankerService
+from src.services.code_review_service import CodeReviewService
 
 
 logging.basicConfig(
@@ -50,14 +52,14 @@ async def lifespan(app: FastAPI):
     embedding_service = EmbeddingService(client=client)
     llm_service = LLMService(client=client)
 
-    reranker_service = (
-        RerankerService(
+    if settings.enable_reranker:
+        reranker_service = RerankerService(
             model_name=settings.reranker_model,
             batch_size=settings.reranker_batch_size,
         )
-        if settings.enable_reranker
-        else None
-    )
+        await reranker_service.load()
+    else:
+        reranker_service = None
     logger.info("Reranker enabled: %s", reranker_service is not None)
 
     app.state.query_service = QueryService(
@@ -73,6 +75,8 @@ async def lifespan(app: FastAPI):
         chunker_service=ChunkerService(),
         document_conversion_service=DocumentConversionService()
     )
+
+    app.state.code_review_service = CodeReviewService(llm_service=llm_service)
 
     try:
         yield
@@ -94,3 +98,4 @@ app.include_router(data_loading_router)
 app.include_router(documents_router)
 app.include_router(profile_router)
 app.include_router(chats_router)
+app.include_router(code_review_router)

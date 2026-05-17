@@ -87,14 +87,14 @@ async def list_chats(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    counts_subq = (
-        select(ChatMessage.chat_id, func.count(ChatMessage.id).label("count"))
-        .group_by(ChatMessage.chat_id)
-        .subquery()
+    msg_count_sq = (
+        select(func.count(ChatMessage.id))
+        .where(ChatMessage.chat_id == Chat.id)
+        .correlate(Chat)
+        .scalar_subquery()
     )
     result = await session.execute(
-        select(Chat, func.coalesce(counts_subq.c.count, 0))
-        .outerjoin(counts_subq, counts_subq.c.chat_id == Chat.id)
+        select(Chat, msg_count_sq)
         .where(Chat.user_id == current_user.id)
         .order_by(desc(Chat.updated_at))
     )
