@@ -18,8 +18,13 @@ class RerankerServiceInterface(ABC):
 
 class RerankerService(RerankerServiceInterface):
     def __init__(self, model_name: str, batch_size: int = 16):
-        self._model = CrossEncoder(model_name)
+        self._model_name = model_name
         self._batch_size = batch_size
+        self._model: CrossEncoder | None = None
+
+    async def load(self) -> None:
+        self._model = await asyncio.to_thread(CrossEncoder, self._model_name)
+        logger.info("Reranker model loaded: %s", self._model_name)
 
     async def rerank(self, query: str, chunks: List[RetrievedChunk]) -> List[RetrievedChunk]:
         if not chunks:
@@ -27,6 +32,8 @@ class RerankerService(RerankerServiceInterface):
         return await asyncio.to_thread(self._rerank_sync, query, chunks)
 
     def _rerank_sync(self, query: str, chunks: List[RetrievedChunk]) -> List[RetrievedChunk]:
+        if self._model is None:
+            return chunks
         pairs = [[query, chunk.text] for chunk in chunks]
         start = time.perf_counter()
         scores = self._model.predict(

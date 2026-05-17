@@ -1,7 +1,14 @@
 .env
+.DS_Store
+.venv/
 interview_prep.md
 MASTER.md
 .vscode/
 __pycache__/
+*.pyc
 textbook_rag_pipeline.md
 exports/
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
+frontend/*.d.ts

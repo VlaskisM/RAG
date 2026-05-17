@@ -2,7 +2,7 @@ import hashlib
 import re
 import asyncio
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Optional
 
 from src.schemas import Block, BlockType, Chunk, ChunkMetadata
 from src.config import settings
@@ -30,16 +30,16 @@ ChunkerService разбивает Markdown-текст учебника на см
 class ChunkerServiceInterface(ABC):
 
     @abstractmethod
-    async def chunk(self, markdown: str, book: str, author: str | None = None) -> List[Chunk]:
+    async def chunk(self, markdown: str, book: str, author: Optional[str] = None) -> List[Chunk]:
         pass
 
 
 class ChunkerService(ChunkerServiceInterface):
 
-    async def chunk(self, markdown: str, book: str, author: str | None = None) -> List[Chunk]:
+    async def chunk(self, markdown: str, book: str, author: Optional[str] = None) -> List[Chunk]:
         return await asyncio.to_thread(self._chunk_sync, markdown, book, author)
 
-    def _chunk_sync(self, markdown: str, book: str, author: str | None) -> List[Chunk]:
+    def _chunk_sync(self, markdown: str, book: str, author: Optional[str]) -> List[Chunk]:
         blocks = self._parse_blocks(markdown)
         blocks = self._merge_split_headings(blocks)
         return self._build_chunks(blocks, book, author)
@@ -182,7 +182,7 @@ class ChunkerService(ChunkerServiceInterface):
 
 
     def _build_chunks(
-        self, blocks: List[Block], book: str, author: str | None
+        self, blocks: List[Block], book: str, author: Optional[str]
     ) -> List[Chunk]:
         chunks: List[Chunk] = []
         current_part = ""
@@ -314,13 +314,12 @@ class ChunkerService(ChunkerServiceInterface):
     def _make_chunk_id(
         self,
         book: str,
-        author: str | None,
+        author: Optional[str],
         part: str,
         chapter: str,
         section: str,
-        listing: str | None,
+        listing: Optional[str],
         text: str,
     ) -> str:
         key = "|".join([book, author or "", part, chapter, section, listing or "", text])
         return hashlib.sha1(key.encode("utf-8")).hexdigest()
-
